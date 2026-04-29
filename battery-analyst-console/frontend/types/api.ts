@@ -1,12 +1,17 @@
 // Battery Analyst Console - API Types
 
-// Decision types
+// ---------------------------------------------------------------------------
+// UI/domain types
+// ---------------------------------------------------------------------------
+
 export type Decision = 'execute' | 'execute_with_caution' | 'watch' | 'hold'
 export type Confidence = 'high' | 'medium_high' | 'medium' | 'low'
 export type Severity = 'critical' | 'warning' | 'info'
 export type BatteryStressLevel = 'low' | 'medium' | 'high'
 export type RiskAppetite = 'conservative' | 'balanced' | 'aggressive'
-export type TemperaturePolicy = 'permissive' | 'balanced' | 'conservative'
+export type TemperaturePolicy = 'relaxed' | 'normal' | 'strict'
+export type MarketVolatility = 'low' | 'medium' | 'high'
+export type DataQualityLevel = 'low' | 'medium' | 'high'
 export type BatteryAction = 'auto' | 'charge' | 'discharge' | 'idle'
 export type EffectiveBatteryAction = Exclude<BatteryAction, 'auto'>
 export type FleetForecastAction = EffectiveBatteryAction | 'mixed'
@@ -78,41 +83,38 @@ export interface FleetBulkActionRequest {
   action: BatteryAction
 }
 
-// Time window
 export interface Window {
   start: string
   end: string
   avg_price: number
 }
 
-// SoC feasibility
 export interface SoCFeasibility {
   feasible: boolean
+  min_soc: number
+  max_soc: number
   start_soc: number
   end_soc: number
-  min_soc_reached: number
-  max_soc_reached: number
   violations: string[]
+  min_soc_reached?: number
+  max_soc_reached?: number
 }
 
-// Battery stress
 export interface BatteryStress {
   level: BatteryStressLevel
   score: number
   reasons: string[]
 }
 
-// Physical constraints
 export interface PhysicalConstraints {
   duration_ok: boolean
   cycle_limit_ok: boolean
   temperature_ok: boolean
-  soc_feasible: boolean
   round_trip_efficiency_applied: boolean
   rapid_switching_avoided: boolean
+  soc_feasible?: boolean
 }
 
-// Alert
 export interface Alert {
   severity: Severity
   title: string
@@ -120,27 +122,31 @@ export interface Alert {
   recommended_action: string
 }
 
-// Alternative schedule
 export interface AlternativeSchedule {
+  label?: string
   charge_window: Window
   discharge_window: Window
-  spread_after_efficiency: number
-  decision: Decision
-  rejection_reasons: string[]
+  expected_value_range_eur?: number[]
+  reason?: string
+  spread_after_efficiency?: number
+  decision?: Decision
+  rejection_reasons?: string[]
 }
 
-// Forecast point
 export interface ForecastPoint {
   timestamp: string
-  p10_price: number
-  p50_price: number
-  p90_price: number
-  actual_price: number | null
-  action: 'charge' | 'discharge' | 'hold'
-  soc: number
+  predicted_price?: number
+  lower_bound?: number
+  upper_bound?: number
+  confidence?: string
+  p10_price?: number
+  p50_price?: number
+  p90_price?: number
+  actual_price?: number | null
+  action?: 'charge' | 'discharge' | 'hold'
+  soc?: number
 }
 
-// Main schedule response
 export interface ScheduleResponse {
   date: string
   decision: Decision
@@ -157,39 +163,116 @@ export interface ScheduleResponse {
   explanation: string[]
 }
 
-// Scenario request
 export interface ScenarioRequest {
   date: string
-  battery_profile: RiskAppetite
-  round_trip_efficiency: number
-  battery_duration_hours: number
-  max_cycles_per_day: number
-  degradation_cost_eur_per_cycle: number
-  risk_appetite: RiskAppetite
+  profile_name: RiskAppetite | string
+  prices: number[]
+  temperatures?: number[] | null
+  round_trip_efficiency?: number | null
+  duration_hours?: number | null
+  max_cycles_per_day?: number | null
+  degradation_cost_eur_per_mwh?: number | null
   temperature_policy: TemperaturePolicy
+  risk_appetite: RiskAppetite
+  forecast_confidence?: Confidence | string
+  market_volatility?: MarketVolatility | string
+  forecast_uncertainty_width?: number | null
+  data_quality_level?: DataQualityLevel | string
+  minimum_margin_eur_per_mwh?: number
+
+  // Legacy UI-only fields kept temporarily until frontend/lib/api.ts is updated.
+  battery_profile?: RiskAppetite
+  battery_duration_hours?: number
+  degradation_cost_eur_per_cycle?: number
 }
 
-// Backtest request
 export interface BacktestRequest {
   date: string
-  battery_profile: RiskAppetite
+  profile_name: RiskAppetite | string
+  lookback_days?: number
+  forecast_method?: 'lookback_average' | string
+  market_volatility?: MarketVolatility | string
+  data_quality_level?: DataQualityLevel | string
+  minimum_margin_eur_per_mwh?: number
+
+  // Legacy UI-only field kept temporarily until frontend/lib/api.ts is updated.
+  battery_profile?: RiskAppetite
 }
 
-// Backtest response
 export interface BacktestResponse {
   date: string
+  profile_name: string
+  forecast_method: string
   decision: Decision
-  charge_window: Window
-  discharge_window: Window
-  expected_value_eur: number
-  realized_value_eur: number
-  actual_spread: number
-  recommendation_quality: 'excellent' | 'good' | 'fair' | 'poor'
-  explanation: string
-  forecast_points: ForecastPoint[]
+  confidence: Confidence
+  charge_window: BackendBacktestRealizedWindow | null
+  discharge_window: BackendBacktestRealizedWindow | null
+  economic_result: BackendBacktestEconomicResult | null
+  schedule_response: ScheduleResponse | null
+  explanation: string[]
+  warnings: string[]
+  expected_value_eur?: number
+  realized_value_eur?: number
+  actual_spread?: number
+  recommendation_quality?: 'excellent' | 'good' | 'fair' | 'poor'
+  forecast_points?: ForecastPoint[]
 }
 
 export type BacktestResult = BacktestResponse
+
+// ---------------------------------------------------------------------------
+// Backend request types
+// ---------------------------------------------------------------------------
+
+export interface BackendScheduleRequest {
+  date: string
+  profile_name?: RiskAppetite | string
+  prices: number[]
+  temperatures?: number[] | null
+  forecast_confidence?: Confidence | string
+  market_volatility?: MarketVolatility | string
+  forecast_uncertainty_width?: number | null
+  data_quality_level?: DataQualityLevel | string
+  minimum_margin_eur_per_mwh?: number
+
+  // Legacy fields are optional only, for backward compatibility.
+  battery?: BatteryProfile
+  strategy?: string
+  market?: string
+  country?: string
+}
+
+export interface BackendScenarioRequest {
+  date: string
+  profile_name?: RiskAppetite | string
+  prices: number[]
+  temperatures?: number[] | null
+  round_trip_efficiency?: number | null
+  duration_hours?: number | null
+  max_cycles_per_day?: number | null
+  degradation_cost_eur_per_mwh?: number | null
+  temperature_policy?: TemperaturePolicy
+  risk_appetite?: RiskAppetite
+  forecast_confidence?: Confidence | string
+  market_volatility?: MarketVolatility | string
+  forecast_uncertainty_width?: number | null
+  data_quality_level?: DataQualityLevel | string
+  minimum_margin_eur_per_mwh?: number
+}
+
+export interface BackendBacktestRequest {
+  date: string
+  profile_name?: RiskAppetite | string
+  lookback_days?: number
+  forecast_method?: 'lookback_average' | string
+  market_volatility?: MarketVolatility | string
+  data_quality_level?: DataQualityLevel | string
+  minimum_margin_eur_per_mwh?: number
+}
+
+// ---------------------------------------------------------------------------
+// Backend response types
+// ---------------------------------------------------------------------------
 
 export interface BackendForecastPoint {
   timestamp: string
@@ -205,14 +288,6 @@ export interface BackendForecastResponse {
   country: string
   unit: string
   points: BackendForecastPoint[]
-}
-
-export interface BackendScheduleRequest {
-  date: string
-  battery: BatteryProfile
-  strategy: 'spread_capture'
-  market: 'day_ahead'
-  country: 'GR'
 }
 
 export interface BackendSoCFeasibility {
@@ -262,40 +337,39 @@ export interface BackendScheduleResponse {
   explanation: string[]
 }
 
-export interface BackendScenarioRequest {
-  date: string
-  battery: BatteryProfile
-  price_multiplier: number
-  efficiency_override: number | null
-  notes?: string
+export interface BackendBacktestRealizedWindow {
+  start: string
+  end: string
+  forecast_avg_price: number
+  realized_avg_price: number
 }
 
-export interface BackendScenarioResponse {
-  date: string
-  scenario_name: string
-  decision: string
-  expected_value_range_eur: number[]
-  key_changes: string[]
-  explanation: string[]
-}
-
-export interface BackendBacktestRequest {
-  start_date: string
-  end_date: string
-  battery: BatteryProfile
-  strategy: 'spread_capture'
+export interface BackendBacktestEconomicResult {
+  forecast_spread_after_efficiency: number
+  realized_spread_after_efficiency: number
+  forecast_expected_value_range_eur: number[]
+  realized_value_eur: number
+  value_error_eur: number
 }
 
 export interface BackendBacktestResponse {
-  start_date: string
-  end_date: string
-  strategy: string
-  summary: {
-    total_days: number
-    profitable_days: number
-    skipped_days: number
-    total_expected_value_eur: number
-    average_daily_value_eur: number
-  }
-  notes: string[]
+  date: string
+  profile_name: string
+  forecast_method: string
+  decision: string
+  confidence: string
+  charge_window: BackendBacktestRealizedWindow | null
+  discharge_window: BackendBacktestRealizedWindow | null
+  economic_result: BackendBacktestEconomicResult | null
+  schedule_response: BackendScheduleResponse | null
+  explanation: string[]
+  warnings: string[]
 }
+
+// ---------------------------------------------------------------------------
+// Legacy/mock compatibility types
+// ---------------------------------------------------------------------------
+
+// The real backend /scenario endpoint now returns BackendScheduleResponse.
+export type BackendScenarioResponse = BackendScheduleResponse
+
