@@ -22,7 +22,10 @@ import { BatteryAssetDetailPanel } from './BatteryAssetDetailPanel'
 import { FleetAlertsPanel } from './FleetAlertsPanel'
 import { FleetManagerSection } from './FleetManagerSection'
 import { MarketForecastSection } from './MarketForecastSection'
+import { OpinionatedRecommendationPanel } from './OpinionatedRecommendationPanel'
+import { ProfitHealthComparisonCard } from './ProfitHealthComparisonCard'
 import { RecommendationSection } from './RecommendationSection'
+import { ScheduleTradeoffMatrix } from './ScheduleTradeoffMatrix'
 
 interface FleetOverviewProps {
   schedule: ScheduleResponse
@@ -122,6 +125,10 @@ export function FleetOverview({
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)]">
         <div className="space-y-6">
+          {schedule.decision === 'hold' && (
+            <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
+          )}
+
           <SectionPanel title="Market Forecast" subtitle="Price signal and recommended operating windows.">
             <MarketForecastSection
               forecastData={forecastData}
@@ -130,7 +137,15 @@ export function FleetOverview({
             />
           </SectionPanel>
 
-          <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
+          {schedule.decision !== 'hold' && (
+            <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
+          )}
+
+          <OpinionatedRecommendationPanel schedule={schedule} />
+
+          <ProfitHealthComparisonCard schedule={schedule} />
+
+          <ScheduleTradeoffMatrix schedule={schedule} />
 
           <SectionPanel title="Battery Assets" subtitle="Asset-level status, controls, and operating decision.">
             <FleetManagerSection
