@@ -1,0 +1,66 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Python virtual environments and packaging output
+.venv/
+venv/
+env/
+.env/
+*.egg-info/
+build/
+dist/
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# FastAPI/Uvicorn local runtime files
+*.log
+logs/
+
+# Node and Next.js dependencies/build output
+node_modules/
+.next/
+out/
+frontend/.next/
+frontend/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+
+# Local data artifacts
+battery-analyst-console/data/*
+!battery-analyst-console/data/README.md
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.pkl
+*.pickle
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+.cache/
