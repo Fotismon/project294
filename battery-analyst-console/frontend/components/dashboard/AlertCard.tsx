@@ -1,52 +1,64 @@
 'use client'
 
 import React from 'react'
-import { Alert as AlertType } from '@/types/api'
+import { Alert as AlertType, Severity } from '@/types/api'
+import { StatusBadge, BadgeTone } from '@/components/ui'
 
 interface AlertCardProps {
   alert: AlertType
+  relatedMetric?: string
 }
 
-export function AlertCard({ alert }: AlertCardProps) {
-  const severityConfig = {
-    critical: {
-      bg: 'bg-error/10 border-error/30',
-      text: 'text-error',
-      icon: 'STOP',
-      badge: 'bg-error/20'
-    },
-    warning: {
-      bg: 'bg-warning/10 border-warning/30',
-      text: 'text-warning',
-      icon: 'WARN',
-      badge: 'bg-warning/20'
-    },
-    info: {
-      bg: 'bg-info/10 border-info/30',
-      text: 'text-info',
-      icon: 'INFO',
-      badge: 'bg-info/20'
-    }
-  }
+const severityTone: Record<Severity, BadgeTone> = {
+  critical: 'critical',
+  warning: 'warning',
+  info: 'info'
+}
 
-  const config = severityConfig[alert.severity]
+function humanizeSeverity(severity: Severity): string {
+  return severity.charAt(0).toUpperCase() + severity.slice(1)
+}
+
+export function inferRelatedMetric(alert: AlertType): string {
+  const source = `${alert.title} ${alert.message}`.toLowerCase()
+
+  if (source.includes('temperature')) return 'Temperature'
+  if (source.includes('forecast') || source.includes('uncertainty')) return 'Forecast uncertainty'
+  if (source.includes('data quality')) return 'Data quality'
+  if (source.includes('spread')) return 'Economic spread'
+  if (source.includes('soc')) return 'State of charge'
+  if (source.includes('cycle')) return 'Cycle limit'
+  if (source.includes('duration')) return 'Duration'
+  if (source.includes('decision')) return 'Decision'
+  if (source.includes('hold')) return 'No-go decision'
+  if (source.includes('degradation')) return 'Degradation risk'
+
+  return 'General'
+}
+
+export function AlertCard({ alert, relatedMetric }: AlertCardProps) {
+  const metric = relatedMetric ?? inferRelatedMetric(alert)
+  const recommendedAction = alert.recommended_action || 'Review this signal before dispatch.'
 
   return (
-    <div className={`rounded-lg border p-4 ${config.bg}`}>
-      <div className="flex items-start gap-3">
-        <span className={`rounded border px-2 py-1 text-[10px] font-semibold ${config.badge} ${config.text}`}>{config.icon}</span>
-        <div className="flex-1">
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className={`rounded px-2 py-0.5 text-xs font-medium ${config.badge} ${config.text}`}>{alert.severity.toUpperCase()}</span>
-            <h4 className="font-medium text-text-primary">{alert.title}</h4>
+    <article className="border border-border bg-surface p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge label={humanizeSeverity(alert.severity)} tone={severityTone[alert.severity]} dot />
+            <h4 className="text-sm font-semibold text-text-primary">{alert.title}</h4>
           </div>
-          <p className="mb-3 text-sm text-text-secondary">{alert.message}</p>
-          <div className="border-t border-border pt-2">
-            <p className="text-xs text-text-muted">Recommended action</p>
-            <p className="text-sm text-text-primary">{alert.recommended_action}</p>
-          </div>
+          <p className="mt-3 text-sm leading-relaxed text-text-secondary">{alert.message}</p>
+        </div>
+        <div className="shrink-0 border border-border bg-surface-elevated/40 px-3 py-2">
+          <p className="text-xs uppercase tracking-wider text-text-muted">Related metric</p>
+          <p className="mt-1 text-xs font-medium text-text-primary">{metric}</p>
         </div>
       </div>
-    </div>
+      <div className="mt-4 border-t border-border pt-3">
+        <p className="text-xs uppercase tracking-wider text-text-muted">Recommended action</p>
+        <p className="mt-1 text-sm text-text-primary">{recommendedAction}</p>
+      </div>
+    </article>
   )
 }

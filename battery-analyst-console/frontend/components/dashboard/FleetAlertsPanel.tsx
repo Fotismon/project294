@@ -1,15 +1,43 @@
 'use client'
 
 import React from 'react'
-import { Alert, BatteryAsset } from '@/types/api'
-import { AlertCard } from './AlertCard'
+import { Alert, BatteryAsset, Severity } from '@/types/api'
+import { AlertCard, inferRelatedMetric } from './AlertCard'
+import { EmptyState, MetricCard, SectionPanel, StatusBadge } from '@/components/ui'
 
 interface FleetAlertsPanelProps {
   alerts: Alert[]
   assets: BatteryAsset[]
 }
 
-export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
+type AlertGroups = Record<Severity, Alert[]>
+
+const severityOrder: Severity[] = ['critical', 'warning', 'info']
+
+const groupMetadata: Record<Severity, { title: string; subtitle: string }> = {
+  critical: {
+    title: 'Critical risks',
+    subtitle: 'Immediate review required.'
+  },
+  warning: {
+    title: 'Warnings',
+    subtitle: 'Review before dispatch.'
+  },
+  info: {
+    title: 'Information',
+    subtitle: 'Context from the latest schedule or scenario.'
+  }
+}
+
+function groupAlertsBySeverity(alerts: Alert[]): AlertGroups {
+  return {
+    critical: alerts.filter((alert) => alert.severity === 'critical'),
+    warning: alerts.filter((alert) => alert.severity === 'warning'),
+    info: alerts.filter((alert) => alert.severity === 'info')
+  }
+}
+
+function generateAssetWarnings(assets: BatteryAsset[]): Alert[] {
   const generatedAlerts: Alert[] = assets.flatMap((asset) => {
     const assetAlerts: Alert[] = []
     const effectiveAction = asset.selected_action === 'auto' ? asset.auto_action : asset.selected_action
@@ -27,7 +55,7 @@ export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
       assetAlerts.push({
         severity: 'warning',
         title: `High temperature: ${asset.name}`,
-        message: `${asset.name} is at ${asset.temperature_c} °C.`,
+        message: `${asset.name} is at ${asset.temperature_c} C.`,
         recommended_action: 'Use conservative action or idle mode if temperature rises further.'
       })
     }
@@ -72,33 +100,114 @@ export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
     })
   }
 
-  const allAlerts = [...generatedAlerts, ...alerts]
-  const grouped = {
-    critical: allAlerts.filter((alert) => alert.severity === 'critical'),
-    warning: allAlerts.filter((alert) => alert.severity === 'warning'),
-    info: allAlerts.filter((alert) => alert.severity === 'info')
-  }
+  return generatedAlerts
+}
 
-  if (allAlerts.length === 0) {
+export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
+  const grouped = groupAlertsBySeverity(alerts)
+  const assetWarnings = generateAssetWarnings(assets)
+  const offlineAssets = assets.filter((asset) => asset.status === 'offline').length
+  const limitedAssets = assets.filter((asset) => asset.status === 'limited').length
+
+  if (alerts.length === 0 && assetWarnings.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-surface-elevated/50 p-6 text-sm text-text-muted">
-        No active alerts from the latest schedule.
-      </div>
+      <SectionPanel
+        title="Operational Risk Center"
+        subtitle="Alerts reflect the latest schedule or scenario result."
+      >
+        <EmptyState
+          title="No active alerts"
+          message="No operational alerts were returned by the latest schedule or scenario."
+        />
+        <p className="mt-3 text-center text-xs text-text-muted">Run a scenario to refresh operational risk signals.</p>
+      </SectionPanel>
     )
   }
 
   return (
     <div className="space-y-6">
-      {(['critical', 'warning', 'info'] as const).map((severity) => (
-        <div key={severity} className="space-y-3">
-          <h3 className={`text-xs uppercase tracking-wider ${severity === 'critical' ? 'text-error' : severity === 'warning' ? 'text-warning' : 'text-info'}`}>
-            {severity}
-          </h3>
-          {grouped[severity].map((alert, index) => (
-            <AlertCard key={`${alert.severity}-${alert.title}-${index}`} alert={alert} />
-          ))}
+      <SectionPanel
+        title="Operational Risk Center"
+        subtitle="Alerts reflect the latest schedule or scenario result."
+      >
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard label="Critical" value={grouped.critical.length} tone={grouped.critical.length > 0 ? 'critical' : 'neutral'} />
+          <MetricCard label="Warning" value={grouped.warning.length} tone={grouped.warning.length > 0 ? 'warning' : 'neutral'} />
+          <MetricCard label="Info" value={grouped.info.length} tone={grouped.info.length > 0 ? 'info' : 'neutral'} />
+          <MetricCard label="Total alerts" value={alerts.length} helperText="Latest schedule/scenario" />
         </div>
-      ))}
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <AssetContext label="Assets monitored" value={assets.length} />
+          <AssetContext label="Offline assets" value={offlineAssets} tone={offlineAssets > 0 ? 'critical' : 'positive'} />
+          <AssetContext label="Limited assets" value={limitedAssets} tone={limitedAssets > 0 ? 'warning' : 'positive'} />
+        </div>
+      </SectionPanel>
+
+      {alerts.length === 0 ? (
+        <EmptyState
+          title="No schedule or scenario alerts"
+          message="No operational alerts were returned by the latest schedule or scenario."
+        />
+      ) : (
+        severityOrder.map((severity) => {
+          const severityAlerts = grouped[severity]
+          if (severityAlerts.length === 0) return null
+
+          return (
+            <SectionPanel
+              key={severity}
+              title={groupMetadata[severity].title}
+              subtitle={groupMetadata[severity].subtitle}
+              action={<StatusBadge label={`${severityAlerts.length}`} tone={severity === 'critical' ? 'critical' : severity === 'warning' ? 'warning' : 'info'} />}
+            >
+              <div className="space-y-3">
+                {severityAlerts.map((alert, index) => (
+                  <AlertCard
+                    key={`${alert.severity}-${alert.title}-${index}`}
+                    alert={alert}
+                    relatedMetric={inferRelatedMetric(alert)}
+                  />
+                ))}
+              </div>
+            </SectionPanel>
+          )
+        })
+      )}
+
+      {assetWarnings.length > 0 && (
+        <SectionPanel
+          title="Asset warnings"
+          subtitle="Asset-level context from current fleet status and operator selections."
+          action={<StatusBadge label={`${assetWarnings.length}`} tone="warning" />}
+        >
+          <div className="space-y-3">
+            {assetWarnings.map((alert, index) => (
+              <AlertCard
+                key={`asset-${alert.severity}-${alert.title}-${index}`}
+                alert={alert}
+                relatedMetric={inferRelatedMetric(alert)}
+              />
+            ))}
+          </div>
+        </SectionPanel>
+      )}
+    </div>
+  )
+}
+
+function AssetContext({
+  label,
+  value,
+  tone = 'neutral'
+}: {
+  label: string
+  value: number
+  tone?: 'neutral' | 'positive' | 'warning' | 'critical' | 'info'
+}) {
+  return (
+    <div className="flex items-center justify-between border border-border bg-surface px-3 py-2">
+      <span className="text-xs uppercase tracking-wider text-text-secondary">{label}</span>
+      <StatusBadge label={String(value)} tone={tone} />
     </div>
   )
 }
