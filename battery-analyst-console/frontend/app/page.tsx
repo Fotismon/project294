@@ -15,6 +15,7 @@ import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { TabId, TabNav } from '@/components/dashboard/TabNav'
 import { getAlerts, getForecast, getSchedule, isUsingMockData, runBacktest, runScenario } from '@/lib/api'
 import { mockAlerts, mockFleetAssets, mockForecastData, mockScheduleResponse } from '@/lib/mock-data'
+import { buildDefaultSchedulerInput } from '@/lib/sample-inputs'
 import {
   Alert,
   BacktestResponse,
@@ -46,6 +47,10 @@ function todayAthens(): string {
     day: '2-digit',
     timeZone: 'Europe/Athens'
   }).format(new Date())
+}
+
+function normalizeEfficiency(value: number): number {
+  return value > 1 ? value / 100 : value
 }
 
 function effectiveAction(asset: BatteryAsset): EffectiveBatteryAction {
@@ -185,18 +190,24 @@ export default function Home() {
     setIsScenarioRunning(true)
     setError(null)
     try {
+      const schedulerInput = buildDefaultSchedulerInput()
       const result = await runScenario(
         {
           date: scheduleData.date,
           profile_name: riskAppetite,
-          prices: [],
-          battery_profile: riskAppetite,
-          round_trip_efficiency: roundTripEfficiency,
-          battery_duration_hours: batteryDuration,
+          prices: schedulerInput.prices,
+          temperatures: schedulerInput.temperatures,
+          round_trip_efficiency: normalizeEfficiency(roundTripEfficiency),
+          duration_hours: batteryDuration,
           max_cycles_per_day: maxCycles,
-          degradation_cost_eur_per_cycle: degradationCost,
+          degradation_cost_eur_per_mwh: degradationCost,
           risk_appetite: riskAppetite,
-          temperature_policy: temperaturePolicy
+          temperature_policy: temperaturePolicy,
+          forecast_confidence: schedulerInput.forecast_confidence,
+          market_volatility: schedulerInput.market_volatility,
+          forecast_uncertainty_width: schedulerInput.forecast_uncertainty_width,
+          data_quality_level: schedulerInput.data_quality_level,
+          minimum_margin_eur_per_mwh: schedulerInput.minimum_margin_eur_per_mwh
         },
         scheduleData
       )

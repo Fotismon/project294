@@ -35,6 +35,7 @@ import {
   mockForecastData,
   mockScheduleResponse
 } from './mock-data'
+import { buildDefaultSchedulerInput } from './sample-inputs'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ''
 
@@ -102,33 +103,6 @@ function rangeFrom(values: number[] | undefined, fallback: [number, number]): [n
   if (!values?.length) return fallback
   if (values.length === 1) return [Math.round(values[0]), Math.round(values[0])]
   return [Math.round(values[0]), Math.round(values[1])]
-}
-
-function buildSamplePrices(): number[] {
-  return Array.from({ length: 96 }, (_, index) => {
-    if (index >= 44 && index <= 51) return 35
-    if (index >= 80 && index <= 87) return 120
-    return 80
-  })
-}
-
-function buildSampleTemperatures(): number[] {
-  return Array.from({ length: 96 }, (_, index) => {
-    if (index >= 80 && index <= 87) return 31
-    return 25
-  })
-}
-
-function getDefaultSchedulerInput() {
-  return {
-    prices: buildSamplePrices(),
-    temperatures: buildSampleTemperatures(),
-    forecast_confidence: 'medium_high' as const,
-    market_volatility: 'medium' as const,
-    forecast_uncertainty_width: 25,
-    data_quality_level: 'medium' as const,
-    minimum_margin_eur_per_mwh: 2
-  }
 }
 
 function normalizeEfficiency(value: number | null | undefined): number | null {
@@ -246,35 +220,35 @@ function mapSchedule(response: BackendScheduleResponse): ScheduleResponse {
 }
 
 function scheduleRequest(date: string, batteryProfile?: RiskAppetite | string): BackendScheduleRequest {
-  const defaults = getDefaultSchedulerInput()
+  const schedulerInput = buildDefaultSchedulerInput()
 
   return {
     date,
     profile_name: profileName(batteryProfile),
-    ...defaults
+    ...schedulerInput
   }
 }
 
 function scenarioRequest(payload: ScenarioRequest): BackendScenarioRequest {
-  const defaults = getDefaultSchedulerInput()
+  const schedulerInput = buildDefaultSchedulerInput()
   const profile = profileName(payload.profile_name || payload.battery_profile || payload.risk_appetite)
 
   return {
     date: payload.date,
     profile_name: profile,
-    prices: payload.prices?.length ? payload.prices : defaults.prices,
-    temperatures: payload.temperatures?.length ? payload.temperatures : defaults.temperatures,
+    prices: payload.prices?.length ? payload.prices : schedulerInput.prices,
+    temperatures: payload.temperatures?.length ? payload.temperatures : schedulerInput.temperatures,
     round_trip_efficiency: normalizeEfficiency(payload.round_trip_efficiency),
     duration_hours: payload.duration_hours ?? payload.battery_duration_hours ?? null,
     max_cycles_per_day: payload.max_cycles_per_day ?? null,
     degradation_cost_eur_per_mwh: payload.degradation_cost_eur_per_mwh ?? payload.degradation_cost_eur_per_cycle ?? null,
     temperature_policy: normalizeTemperaturePolicy(payload.temperature_policy),
     risk_appetite: payload.risk_appetite,
-    forecast_confidence: payload.forecast_confidence ?? defaults.forecast_confidence,
-    market_volatility: payload.market_volatility ?? defaults.market_volatility,
-    forecast_uncertainty_width: payload.forecast_uncertainty_width ?? defaults.forecast_uncertainty_width,
-    data_quality_level: payload.data_quality_level ?? defaults.data_quality_level,
-    minimum_margin_eur_per_mwh: payload.minimum_margin_eur_per_mwh ?? defaults.minimum_margin_eur_per_mwh
+    forecast_confidence: payload.forecast_confidence ?? schedulerInput.forecast_confidence,
+    market_volatility: payload.market_volatility ?? schedulerInput.market_volatility,
+    forecast_uncertainty_width: payload.forecast_uncertainty_width ?? schedulerInput.forecast_uncertainty_width,
+    data_quality_level: payload.data_quality_level ?? schedulerInput.data_quality_level,
+    minimum_margin_eur_per_mwh: payload.minimum_margin_eur_per_mwh ?? schedulerInput.minimum_margin_eur_per_mwh
   }
 }
 

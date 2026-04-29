@@ -69,7 +69,7 @@ export function ScenarioControls({
         </SelectControl>
 
         <div>
-          <label className="mb-2 block text-xs text-text-secondary">Degradation Cost (€/cycle)</label>
+          <label className="mb-2 block text-xs text-text-secondary">Degradation Cost (€/MWh)</label>
           <input
             type="number"
             min="0"

@@ -180,7 +180,7 @@ export interface ScenarioRequest {
   data_quality_level?: DataQualityLevel | string
   minimum_margin_eur_per_mwh?: number
 
-  // Legacy UI-only fields kept temporarily until frontend/lib/api.ts is updated.
+  // Legacy UI-only fields kept temporarily for older callers.
   battery_profile?: RiskAppetite
   battery_duration_hours?: number
   degradation_cost_eur_per_cycle?: number
