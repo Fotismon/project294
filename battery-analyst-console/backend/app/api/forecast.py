@@ -1,59 +1,34 @@
-from fastapi import APIRouter
+from datetime import date as _date, timedelta
 
-from app.schemas.forecast import ForecastPoint, ForecastResponse
+from fastapi import APIRouter, HTTPException, Query
+
+from app.forecasting.forecast_data import (
+    build_inference_features,
+    fetch_weather_forecast,
+    load_feature_store,
+)
+from app.forecasting.forecast_engine import run_forecast
+from app.schemas.forecast import ForecastResponse
 
 router = APIRouter(tags=["forecast"])
 
 
 @router.get("/forecast", response_model=ForecastResponse)
-def get_forecast() -> ForecastResponse:
-    return ForecastResponse(
-        date="2026-04-29",
-        market="day_ahead",
-        country="GR",
-        unit="EUR/MWh",
-        points=[
-            ForecastPoint(
-                timestamp="2026-04-29T00:00:00+03:00",
-                predicted_price=72.4,
-                lower_bound=64.1,
-                upper_bound=81.8,
-                confidence="medium",
-            ),
-            ForecastPoint(
-                timestamp="2026-04-29T06:00:00+03:00",
-                predicted_price=54.2,
-                lower_bound=47.5,
-                upper_bound=62.0,
-                confidence="medium_high",
-            ),
-            ForecastPoint(
-                timestamp="2026-04-29T11:00:00+03:00",
-                predicted_price=38.4,
-                lower_bound=31.2,
-                upper_bound=45.9,
-                confidence="high",
-            ),
-            ForecastPoint(
-                timestamp="2026-04-29T17:00:00+03:00",
-                predicted_price=94.7,
-                lower_bound=82.0,
-                upper_bound=108.5,
-                confidence="medium",
-            ),
-            ForecastPoint(
-                timestamp="2026-04-29T20:00:00+03:00",
-                predicted_price=116.8,
-                lower_bound=101.3,
-                upper_bound=132.6,
-                confidence="medium_high",
-            ),
-            ForecastPoint(
-                timestamp="2026-04-29T23:00:00+03:00",
-                predicted_price=83.6,
-                lower_bound=73.8,
-                upper_bound=95.1,
-                confidence="medium",
-            ),
-        ],
+def get_forecast(
+    date: str = Query(
+        default=None,
+        description="Target date in YYYY-MM-DD format. Defaults to tomorrow.",
     )
+) -> ForecastResponse:
+    if date is None:
+        date = (_date.today() + timedelta(days=1)).isoformat()
+
+    try:
+        store = load_feature_store()
+        weather = fetch_weather_forecast(date)
+        X = build_inference_features(date, store, weather)
+        return run_forecast(date, X)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Forecast error: {exc}") from exc

@@ -4,13 +4,16 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { ApiStatusBanner } from '@/components/dashboard/ApiStatusBanner'
 import { AlertCard } from '@/components/dashboard/AlertCard'
 import { BacktestPanel } from '@/components/dashboard/BacktestPanel'
+import { BatteryAssetDetailPanel } from '@/components/dashboard/BatteryAssetDetailPanel'
 import { BatteryStressCard } from '@/components/dashboard/BatteryStressCard'
 import { ConstraintPanel } from '@/components/dashboard/ConstraintPanel'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { FleetAlertsPanel } from '@/components/dashboard/FleetAlertsPanel'
 import { FleetOverview } from '@/components/dashboard/FleetOverview'
 import { FleetManagerSection } from '@/components/dashboard/FleetManagerSection'
+import { NoActionPanel } from '@/components/dashboard/NoActionPanel'
 import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
+import { ScenarioComparisonPanel } from '@/components/dashboard/ScenarioComparisonPanel'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { ConsoleSectionId } from '@/components/dashboard/SideNav'
 import { clearApiFallback, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, runBacktest, runScenario } from '@/lib/api'
@@ -134,6 +137,7 @@ export default function Home() {
   const [alerts, setAlerts] = useState<Alert[]>(mockAlerts)
   const [fleetAssets, setFleetAssets] = useState<BatteryAsset[]>(mockFleetAssets)
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [apiStatus, setApiStatus] = useState<ApiStatus>({
@@ -148,6 +152,8 @@ export default function Home() {
   const [riskAppetite, setRiskAppetite] = useState<RiskAppetite>('balanced')
   const [temperaturePolicy, setTemperaturePolicy] = useState<TemperaturePolicy>('normal')
   const [isScenarioRunning, setIsScenarioRunning] = useState(false)
+  const [baseScenarioSchedule, setBaseScenarioSchedule] = useState<ScheduleResponse | null>(null)
+  const [scenarioResult, setScenarioResult] = useState<ScheduleResponse | null>(null)
 
   const [backtestDate, setBacktestDate] = useState('2026-04-25')
   const [backtestProfile, setBacktestProfile] = useState<RiskAppetite>('balanced')
@@ -156,6 +162,10 @@ export default function Home() {
 
   const fleetSummary = useMemo(() => calculateFleetSummary(fleetAssets), [fleetAssets])
   const fleetRecommendation = useMemo(() => calculateFleetRecommendation(fleetAssets, fleetSummary), [fleetAssets, fleetSummary])
+  const selectedAsset = useMemo(
+    () => fleetAssets.find((asset) => asset.id === selectedAssetId) ?? null,
+    [fleetAssets, selectedAssetId]
+  )
   const stressDistribution = useMemo(() => ({
     low: fleetAssets.filter((asset) => asset.stress_level === 'low').length,
     medium: fleetAssets.filter((asset) => asset.stress_level === 'medium').length,
@@ -251,6 +261,7 @@ export default function Home() {
     clearApiFallback()
     try {
       const schedulerInput = buildDefaultSchedulerInput()
+      setBaseScenarioSchedule(scheduleData)
       const result = await runScenario(
         {
           date: scheduleData.date,
@@ -271,6 +282,7 @@ export default function Home() {
         },
         scheduleData
       )
+      setScenarioResult(result)
       setScheduleData(result)
       setAlerts(scheduleAlertsOrFallback(result))
       const fallback = getLastApiFallback()
@@ -392,11 +404,15 @@ export default function Home() {
             fleetSummary={fleetSummary}
             fleetRecommendation={fleetRecommendation}
             selectedAssetIds={selectedAssetIds}
+            selectedAssetId={selectedAssetId}
+            selectedAsset={selectedAsset}
             onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
             onClearSelection={() => setSelectedAssetIds([])}
             onToggleSelected={handleToggleSelected}
             onApplyAction={handleApplyBulkAction}
             onAssetActionChange={handleAssetActionChange}
+            onOpenAssetDetail={setSelectedAssetId}
+            onCloseAssetDetail={() => setSelectedAssetId(null)}
           />
         )}
 
@@ -407,12 +423,15 @@ export default function Home() {
               assets={fleetAssets}
               summary={fleetSummary}
               selectedIds={selectedAssetIds}
+              selectedAssetId={selectedAssetId}
               onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
               onClearSelection={() => setSelectedAssetIds([])}
               onToggleSelected={handleToggleSelected}
               onApplyAction={handleApplyBulkAction}
               onAssetActionChange={handleAssetActionChange}
+              onOpenAssetDetail={setSelectedAssetId}
             />
+            <BatteryAssetDetailPanel asset={selectedAsset} schedule={scheduleData} onClose={() => setSelectedAssetId(null)} />
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <ConstraintPanel constraints={scheduleData.physical_constraints} />
               <BatteryStressCard stress={scheduleData.battery_stress} />
@@ -423,23 +442,60 @@ export default function Home() {
         {activeSection === 'scenario' && (
           <div className="space-y-6">
             <SectionHeader title="Scenario Analyst" subtitle="Test operating assumptions before committing a battery schedule." />
-            <ScenarioControls
-              roundTripEfficiency={roundTripEfficiency}
-              onRoundTripEfficiencyChange={setRoundTripEfficiency}
-              batteryDuration={batteryDuration}
-              onBatteryDurationChange={setBatteryDuration}
-              maxCycles={maxCycles}
-              onMaxCyclesChange={setMaxCycles}
-              degradationCost={degradationCost}
-              onDegradationCostChange={setDegradationCost}
-              riskAppetite={riskAppetite}
-              onRiskAppetiteChange={setRiskAppetite}
-              temperaturePolicy={temperaturePolicy}
-              onTemperaturePolicyChange={setTemperaturePolicy}
-              onRunScenario={handleRunScenario}
-              isRunning={isScenarioRunning}
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
+              <div>
+                <ScenarioControls
+                  roundTripEfficiency={roundTripEfficiency}
+                  onRoundTripEfficiencyChange={setRoundTripEfficiency}
+                  batteryDuration={batteryDuration}
+                  onBatteryDurationChange={setBatteryDuration}
+                  maxCycles={maxCycles}
+                  onMaxCyclesChange={setMaxCycles}
+                  degradationCost={degradationCost}
+                  onDegradationCostChange={setDegradationCost}
+                  riskAppetite={riskAppetite}
+                  onRiskAppetiteChange={setRiskAppetite}
+                  temperaturePolicy={temperaturePolicy}
+                  onTemperaturePolicyChange={setTemperaturePolicy}
+                  onRunScenario={handleRunScenario}
+                  isRunning={isScenarioRunning}
+                />
+              </div>
+
+              <div className="space-y-4">
+                <div className="border border-border bg-surface-elevated/50 p-4">
+                  <p className="text-xs uppercase tracking-wider text-text-secondary">Result summary</p>
+                  <p className="mt-1 text-sm text-text-muted">
+                    {scenarioResult ? 'Latest scenario result is now the active schedule.' : 'Run a scenario to compare against the base case.'}
+                  </p>
+                </div>
+
+                {scheduleData.decision === 'hold' ? (
+                  <NoActionPanel schedule={scheduleData} />
+                ) : (
+                  <RecommendationCards schedule={scheduleData} />
+                )}
+              </div>
+            </div>
+
+            <ScenarioComparisonPanel
+              baseSchedule={baseScenarioSchedule}
+              scenarioSchedule={scenarioResult}
             />
-            <RecommendationCards schedule={scheduleData} />
+
+            <div className="border border-border bg-surface-elevated/50 p-4">
+              <h3 className="text-xs uppercase tracking-wider text-text-secondary">Scenario reasoning</h3>
+              {scheduleData.explanation.length > 0 ? (
+                <ul className="mt-3 space-y-2">
+                  {scheduleData.explanation.slice(0, 5).map((reason) => (
+                    <li key={reason} className="text-sm leading-relaxed text-text-secondary">- {reason}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-text-muted">No scenario explanation returned.</p>
+              )}
+            </div>
+
             <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
               <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Impact Preview</h3>
               <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
@@ -450,6 +506,7 @@ export default function Home() {
                 <PreviewItem label="Manual Overrides" value={fleetRecommendation.manual_override_count} />
               </div>
             </div>
+
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <ConstraintPanel constraints={scheduleData.physical_constraints} />
               <BatteryStressCard stress={scheduleData.battery_stress} />

@@ -8,6 +8,7 @@ import { BatteryActionSelector } from './BatteryActionSelector'
 interface BatteryAssetTableProps {
   assets: BatteryAsset[]
   selectedIds: string[]
+  selectedAssetId?: string | null
   onToggleSelected: (id: string) => void
   onActionChange: (id: string, action: BatteryAction) => void
   onOpenAssetDetail?: (assetId: string) => void
@@ -68,6 +69,7 @@ function socTone(value: number): string {
 export function BatteryAssetTable({
   assets,
   selectedIds,
+  selectedAssetId,
   onToggleSelected,
   onActionChange,
   onOpenAssetDetail
@@ -104,6 +106,7 @@ export function BatteryAssetTable({
           <tbody className="divide-y divide-border">
             {assets.map((asset) => {
               const selected = selectedIds.includes(asset.id)
+              const detailSelected = selectedAssetId === asset.id
               const effective = effectiveAction(asset)
               const isManual = asset.selected_action !== 'auto'
               const warningCount = asset.constraint_warnings.length
@@ -111,7 +114,12 @@ export function BatteryAssetTable({
               const detailEnabled = Boolean(onOpenAssetDetail)
 
               return (
-                <tr key={asset.id} className={`transition hover:bg-surface ${isManual ? 'bg-warning/5' : ''}`}>
+                <tr
+                  key={asset.id}
+                  className={`border-l-2 transition hover:bg-surface ${
+                    detailSelected ? 'border-info bg-info/5' : isManual ? 'border-transparent bg-warning/5' : 'border-transparent'
+                  }`}
+                >
                   <td className="px-3 py-3 align-top">
                     <input
                       type="checkbox"
@@ -179,10 +187,14 @@ export function BatteryAssetTable({
                       type="button"
                       disabled={!detailEnabled}
                       onClick={() => onOpenAssetDetail?.(asset.id)}
-                      title={detailEnabled ? `Open ${asset.name}` : 'Asset detail coming next.'}
-                      className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-surface-elevated disabled:cursor-not-allowed disabled:text-text-muted"
+                      title={detailEnabled ? `Open ${asset.name}` : 'Asset detail unavailable'}
+                      className={`border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:text-text-muted ${
+                        detailSelected
+                          ? 'border-info bg-info/10 text-info'
+                          : 'border-border bg-surface text-text-primary hover:bg-surface-elevated'
+                      }`}
                     >
-                      Open
+                      {detailSelected ? 'Viewing' : 'Open'}
                     </button>
                   </td>
                 </tr>

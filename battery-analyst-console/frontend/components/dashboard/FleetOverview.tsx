@@ -18,10 +18,14 @@ import {
   SectionPanel,
   StressBadge
 } from '@/components/ui'
+import { BatteryAssetDetailPanel } from './BatteryAssetDetailPanel'
 import { FleetAlertsPanel } from './FleetAlertsPanel'
 import { FleetManagerSection } from './FleetManagerSection'
 import { MarketForecastSection } from './MarketForecastSection'
+import { OpinionatedRecommendationPanel } from './OpinionatedRecommendationPanel'
+import { ProfitHealthComparisonCard } from './ProfitHealthComparisonCard'
 import { RecommendationSection } from './RecommendationSection'
+import { ScheduleTradeoffMatrix } from './ScheduleTradeoffMatrix'
 
 interface FleetOverviewProps {
   schedule: ScheduleResponse
@@ -31,11 +35,15 @@ interface FleetOverviewProps {
   fleetSummary: FleetSummary
   fleetRecommendation: FleetRecommendation
   selectedAssetIds: string[]
+  selectedAssetId: string | null
+  selectedAsset: BatteryAsset | null
   onSelectAll: () => void
   onClearSelection: () => void
   onToggleSelected: (id: string) => void
   onApplyAction: (action: BatteryAction) => void
   onAssetActionChange: (id: string, action: BatteryAction) => void
+  onOpenAssetDetail: (assetId: string) => void
+  onCloseAssetDetail: () => void
 }
 
 function formatEuro(value: number): string {
@@ -87,11 +95,15 @@ export function FleetOverview({
   fleetSummary,
   fleetRecommendation,
   selectedAssetIds,
+  selectedAssetId,
+  selectedAsset,
   onSelectAll,
   onClearSelection,
   onToggleSelected,
   onApplyAction,
-  onAssetActionChange
+  onAssetActionChange,
+  onOpenAssetDetail,
+  onCloseAssetDetail
 }: FleetOverviewProps) {
   const hasAlerts = alerts.length > 0 || hasGeneratedAssetAlerts(fleetAssets)
 
@@ -113,6 +125,10 @@ export function FleetOverview({
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)]">
         <div className="space-y-6">
+          {schedule.decision === 'hold' && (
+            <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
+          )}
+
           <SectionPanel title="Market Forecast" subtitle="Price signal and recommended operating windows.">
             <MarketForecastSection
               forecastData={forecastData}
@@ -121,23 +137,35 @@ export function FleetOverview({
             />
           </SectionPanel>
 
-          <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
+          {schedule.decision !== 'hold' && (
+            <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
+          )}
+
+          <OpinionatedRecommendationPanel schedule={schedule} />
+
+          <ProfitHealthComparisonCard schedule={schedule} />
+
+          <ScheduleTradeoffMatrix schedule={schedule} />
 
           <SectionPanel title="Battery Assets" subtitle="Asset-level status, controls, and operating decision.">
             <FleetManagerSection
               assets={fleetAssets}
               summary={fleetSummary}
               selectedIds={selectedAssetIds}
+              selectedAssetId={selectedAssetId}
               onSelectAll={onSelectAll}
               onClearSelection={onClearSelection}
               onToggleSelected={onToggleSelected}
               onApplyAction={onApplyAction}
               onAssetActionChange={onAssetActionChange}
+              onOpenAssetDetail={onOpenAssetDetail}
             />
           </SectionPanel>
         </div>
 
         <div className="space-y-6">
+          <BatteryAssetDetailPanel asset={selectedAsset} schedule={schedule} onClose={onCloseAssetDetail} />
+
           <SectionPanel title="Operational Alerts" subtitle="Risks from the latest schedule or scenario.">
             {hasAlerts ? (
               <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />

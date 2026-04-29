@@ -36,12 +36,26 @@ export function ScenarioControls({
   onRunScenario,
   isRunning = false
 }: ScenarioControlsProps) {
+  const riskAppetiteDescription: Record<RiskAppetite, string> = {
+    conservative: 'Conservative risk appetite increases required margin.',
+    balanced: 'Balanced risk appetite keeps the standard required margin.',
+    aggressive: 'Aggressive risk appetite lowers required margin.'
+  }
+  const temperaturePolicyDescription: Record<TemperaturePolicy, string> = {
+    relaxed: 'Relaxed policy allows slightly warmer operating windows.',
+    normal: 'Normal policy uses standard temperature thresholds.',
+    strict: 'Strict temperature policy avoids warmer operating windows.'
+  }
+
   return (
     <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-      <h3 className="mb-4 text-xs uppercase tracking-wider text-text-secondary">Scenario Parameters</h3>
+      <div className="mb-4">
+        <h3 className="text-xs uppercase tracking-wider text-text-secondary">Scenario assumptions</h3>
+        <p className="mt-1 text-xs text-text-muted">Adjust operating assumptions and recompute the recommendation.</p>
+      </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <div>
-          <label className="mb-2 block text-xs text-text-secondary">Round-trip Efficiency: {roundTripEfficiency}%</label>
+          <label className="mb-2 block text-xs text-text-secondary">Round-trip efficiency: {roundTripEfficiency}%</label>
           <input
             type="range"
             min="70"
@@ -56,20 +70,20 @@ export function ScenarioControls({
           </div>
         </div>
 
-        <SelectControl label="Battery Duration" value={batteryDuration} onChange={(value) => onBatteryDurationChange(Number(value))}>
+        <SelectControl label="Duration hours" value={batteryDuration} onChange={(value) => onBatteryDurationChange(Number(value))}>
           <option value={1}>1h</option>
           <option value={2}>2h</option>
           <option value={3}>3h</option>
           <option value={4}>4h</option>
         </SelectControl>
 
-        <SelectControl label="Max Cycles per Day" value={maxCycles} onChange={(value) => onMaxCyclesChange(Number(value))}>
+        <SelectControl label="Max cycles per day" value={maxCycles} onChange={(value) => onMaxCyclesChange(Number(value))}>
           <option value={1}>1 cycle</option>
           <option value={2}>2 cycles</option>
         </SelectControl>
 
         <div>
-          <label className="mb-2 block text-xs text-text-secondary">Degradation Cost (€/MWh)</label>
+          <label className="mb-2 block text-xs text-text-secondary">Degradation cost €/MWh</label>
           <input
             type="number"
             min="0"
@@ -80,13 +94,23 @@ export function ScenarioControls({
           />
         </div>
 
-        <SelectControl label="Risk Appetite" value={riskAppetite} onChange={(value) => onRiskAppetiteChange(value as RiskAppetite)}>
+        <SelectControl
+          label="Risk appetite"
+          value={riskAppetite}
+          onChange={(value) => onRiskAppetiteChange(value as RiskAppetite)}
+          description={riskAppetiteDescription[riskAppetite]}
+        >
           <option value="conservative">Conservative</option>
           <option value="balanced">Balanced</option>
           <option value="aggressive">Aggressive</option>
         </SelectControl>
 
-        <SelectControl label="Temperature Policy" value={temperaturePolicy} onChange={(value) => onTemperaturePolicyChange(value as TemperaturePolicy)}>
+        <SelectControl
+          label="Temperature policy"
+          value={temperaturePolicy}
+          onChange={(value) => onTemperaturePolicyChange(value as TemperaturePolicy)}
+          description={temperaturePolicyDescription[temperaturePolicy]}
+        >
           <option value="relaxed">Relaxed</option>
           <option value="normal">Normal</option>
           <option value="strict">Strict</option>
@@ -112,11 +136,13 @@ function SelectControl({
   label,
   value,
   onChange,
+  description,
   children
 }: {
   label: string
   value: string | number
   onChange: (value: string) => void
+  description?: string
   children: React.ReactNode
 }) {
   return (
@@ -129,6 +155,7 @@ function SelectControl({
       >
         {children}
       </select>
+      {description && <p className="mt-2 text-xs leading-relaxed text-text-muted">{description}</p>}
     </div>
   )
 }

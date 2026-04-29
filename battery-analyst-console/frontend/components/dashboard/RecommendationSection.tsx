@@ -14,6 +14,7 @@ import {
 import { AlternativesPanel } from './AlternativesPanel'
 import { BatteryStressCard } from './BatteryStressCard'
 import { ConstraintPanel } from './ConstraintPanel'
+import { NoActionPanel } from './NoActionPanel'
 import { SoCFeasibilityCard } from './SoCFeasibilityCard'
 
 interface RecommendationSectionProps {
@@ -174,89 +175,72 @@ function TopAlerts({ alerts }: { alerts: Alert[] }) {
   )
 }
 
-function HoldRecommendation({ schedule }: { schedule: ScheduleResponse }) {
-  const alertReasons = topAlerts(schedule.alerts)
-    .filter((alert) => alert.severity !== 'info')
-    .map((alert) => `${alert.title}: ${alert.message}`)
-  const reasons = [
-    ...schedule.explanation,
-    ...schedule.soc_feasibility.violations,
-    ...alertReasons
-  ]
-
-  return (
-    <div className="space-y-4">
-      <div className="border border-warning/30 bg-warning/10 p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <DecisionBadge decision={schedule.decision} size="md" />
-          <ConfidenceBadge confidence={schedule.confidence} size="md" />
-        </div>
-        <h3 className="mt-4 text-2xl font-semibold text-text-primary">No action recommended</h3>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-secondary">
-          Forecasted spread does not compensate for round-trip efficiency losses and battery degradation risk.
-        </p>
-        <p className="mt-3 text-sm font-medium text-text-primary">
-          Hold operation and monitor updated forecasts or rerun scenario with different assumptions.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <MetricCard label="Expected value" value={formatEuroRange(schedule.expected_value_range_eur)} tone="warning" />
-        <MetricCard label="Spread after efficiency" value={formatSpread(schedule.spread_after_efficiency)} tone="warning" />
-        <MetricCard label="Battery stress" value={<StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} size="md" />} />
-      </div>
-
-      <SectionPanel title="No-action reasons">
-        <ReasonList reasons={reasons} emptyTitle="No explanation was returned for this recommendation." />
-      </SectionPanel>
-
-      <TopAlerts alerts={schedule.alerts} />
-    </div>
-  )
-}
-
 export function RecommendationSection({ schedule, fleetRecommendation }: RecommendationSectionProps) {
-  const isHold = schedule.decision === 'hold'
+  if (schedule.decision === 'hold') {
+    return (
+      <div className="space-y-5">
+        <NoActionPanel schedule={schedule} />
+
+        {fleetRecommendation.warnings.length > 0 && (
+          <div className="border border-warning/30 bg-warning/10 p-4">
+            <p className="mb-2 text-xs uppercase tracking-wider text-warning">Fleet warnings</p>
+            <ul className="space-y-1">
+              {fleetRecommendation.warnings.map((warning) => (
+                <li key={warning} className="text-sm text-text-secondary">- {warning}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="space-y-6">
+            <ConstraintPanel constraints={schedule.physical_constraints} />
+            <BatteryStressCard stress={schedule.battery_stress} />
+          </div>
+          <div className="space-y-6">
+            <SoCFeasibilityCard feasibility={schedule.soc_feasibility} />
+            <AlternativesPanel alternatives={schedule.alternatives} />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <SectionPanel
       title="Fleet Recommendation"
       subtitle="Risk-adjusted operating decision for the current forecast."
     >
-      {isHold ? (
-        <HoldRecommendation schedule={schedule} />
-      ) : (
-        <div className="space-y-5">
-          <div className="border border-border bg-surface p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <DecisionBadge decision={schedule.decision} size="md" />
-              <ConfidenceBadge confidence={schedule.confidence} size="md" />
-              <StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} size="md" />
-            </div>
-            <h3 className="mt-4 text-2xl font-semibold text-text-primary">{actionHeadline(schedule.decision)}</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-secondary">{actionDescription(schedule)}</p>
+      <div className="space-y-5">
+        <div className="border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <DecisionBadge decision={schedule.decision} size="md" />
+            <ConfidenceBadge confidence={schedule.confidence} size="md" />
+            <StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} size="md" />
           </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard label="Expected value" value={formatEuroRange(schedule.expected_value_range_eur)} tone="positive" />
-            <MetricCard label="Spread after efficiency" value={formatSpread(schedule.spread_after_efficiency)} tone="info" />
-            <MetricCard label="Manual overrides" value={fleetRecommendation.manual_override_count} />
-            <MetricCard label="Override value delta" value={formatDelta(fleetRecommendation.override_value_delta_eur)} />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <WindowSummary label="Charge" window={schedule.charge_window} />
-            <WindowSummary label="Discharge" window={schedule.discharge_window} />
-          </div>
-
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
-            <SectionPanel title="Why this recommendation?">
-              <ReasonList reasons={schedule.explanation} emptyTitle="No explanation was returned for this recommendation." />
-            </SectionPanel>
-            <TopAlerts alerts={schedule.alerts} />
-          </div>
+          <h3 className="mt-4 text-2xl font-semibold text-text-primary">{actionHeadline(schedule.decision)}</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-secondary">{actionDescription(schedule)}</p>
         </div>
-      )}
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard label="Expected value" value={formatEuroRange(schedule.expected_value_range_eur)} tone="positive" />
+          <MetricCard label="Spread after efficiency" value={formatSpread(schedule.spread_after_efficiency)} tone="info" />
+          <MetricCard label="Manual overrides" value={fleetRecommendation.manual_override_count} />
+          <MetricCard label="Override value delta" value={formatDelta(fleetRecommendation.override_value_delta_eur)} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <WindowSummary label="Charge" window={schedule.charge_window} />
+          <WindowSummary label="Discharge" window={schedule.discharge_window} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
+          <SectionPanel title="Why this recommendation?">
+            <ReasonList reasons={schedule.explanation} emptyTitle="No explanation was returned for this recommendation." />
+          </SectionPanel>
+          <TopAlerts alerts={schedule.alerts} />
+        </div>
+      </div>
 
       {fleetRecommendation.warnings.length > 0 && (
         <div className="mt-5 border-t border-border pt-4">

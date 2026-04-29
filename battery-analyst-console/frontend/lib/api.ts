@@ -278,13 +278,39 @@ function mapSchedule(response: BackendScheduleResponse): ScheduleResponse {
   }
 }
 
-function scheduleRequest(date: string, batteryProfile?: RiskAppetite | string): BackendScheduleRequest {
+function forecastToScheduleInputs(raw: BackendForecastResponse): {
+  prices: number[]
+  forecast_uncertainty_width: number
+  forecast_confidence: Confidence
+} {
+  const prices = raw.points.map((p) => p.predicted_price)
+  const counts: Record<string, number> = {}
+  for (const pt of raw.points) counts[pt.confidence] = (counts[pt.confidence] ?? 0) + 1
+  const topConfidence = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'medium'
+  return {
+    prices,
+    forecast_uncertainty_width: raw.avg_band_width_eur,
+    forecast_confidence: asConfidence(topConfidence),
+  }
+}
+
+function scheduleRequest(
+  date: string,
+  batteryProfile?: RiskAppetite | string,
+  forecastOverrides?: { prices: number[]; forecast_uncertainty_width: number; forecast_confidence: Confidence }
+): BackendScheduleRequest {
   const schedulerInput = buildDefaultSchedulerInput()
 
   return {
     date,
     profile_name: profileName(batteryProfile),
-    ...schedulerInput
+    prices: forecastOverrides?.prices ?? schedulerInput.prices,
+    temperatures: schedulerInput.temperatures,
+    forecast_confidence: forecastOverrides?.forecast_confidence ?? schedulerInput.forecast_confidence,
+    market_volatility: schedulerInput.market_volatility,
+    forecast_uncertainty_width: forecastOverrides?.forecast_uncertainty_width ?? schedulerInput.forecast_uncertainty_width,
+    data_quality_level: schedulerInput.data_quality_level,
+    minimum_margin_eur_per_mwh: schedulerInput.minimum_margin_eur_per_mwh,
   }
 }
 
@@ -368,7 +394,7 @@ export async function getForecast(date: string): Promise<ForecastPoint[]> {
   if (!API_BASE_URL) return mockForecastData
 
   try {
-    return mapForecast(await fetchJson<BackendForecastResponse>('/forecast'))
+    return mapForecast(await fetchJson<BackendForecastResponse>(`/forecast?date=${date}`))
   } catch (error) {
     console.warn('Forecast API unavailable, falling back to mock data:', error)
     recordApiFallback('/forecast', error)
@@ -380,9 +406,18 @@ export async function getSchedule(date: string, batteryProfile?: RiskAppetite | 
   if (!API_BASE_URL) return mockScheduleResponse
 
   try {
+    // Fetch the real forecast first so the schedule uses model-predicted prices.
+    let forecastOverrides: { prices: number[]; forecast_uncertainty_width: number; forecast_confidence: Confidence } | undefined
+    try {
+      const rawForecast = await fetchJson<BackendForecastResponse>(`/forecast?date=${date}`)
+      forecastOverrides = forecastToScheduleInputs(rawForecast)
+    } catch {
+      // Forecast unavailable — schedule will fall back to sample prices.
+    }
+
     return mapSchedule(await fetchJson<BackendScheduleResponse>('/schedule', {
       method: 'POST',
-      body: JSON.stringify(scheduleRequest(date, batteryProfile))
+      body: JSON.stringify(scheduleRequest(date, batteryProfile, forecastOverrides))
     }))
   } catch (error) {
     console.warn('Schedule API unavailable, falling back to mock data:', error)
