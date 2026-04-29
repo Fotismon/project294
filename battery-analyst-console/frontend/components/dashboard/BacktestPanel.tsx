@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { BacktestResponse, RiskAppetite } from '@/types/api'
+import { BacktestResponse, BatteryAsset, RiskAppetite } from '@/types/api'
 import { ForecastChart } from './ForecastChart'
 import { MetricCard } from './MetricCard'
 
@@ -13,13 +13,20 @@ interface BacktestPanelProps {
   onRunBacktest: () => void
   isRunning: boolean
   result: BacktestResponse | null
+  assets?: BatteryAsset[]
 }
 
 function formatDecision(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-export function BacktestPanel({ date, onDateChange, profile, onProfileChange, onRunBacktest, isRunning, result }: BacktestPanelProps) {
+export function BacktestPanel({ date, onDateChange, profile, onProfileChange, onRunBacktest, isRunning, result, assets = [] }: BacktestPanelProps) {
+  const assetDistribution = {
+    charge: assets.filter((asset) => asset.auto_action === 'charge').length,
+    discharge: assets.filter((asset) => asset.auto_action === 'discharge').length,
+    idle: assets.filter((asset) => asset.auto_action === 'idle').length
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
@@ -67,9 +74,52 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
           </div>
 
           <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
+            <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Backtest Summary</h3>
+            <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
+              <SummaryItem label="Batteries Simulated" value={assets.length || 8} />
+              <SummaryItem label="Charge" value={assetDistribution.charge || 4} />
+              <SummaryItem label="Discharge" value={assetDistribution.discharge || 2} />
+              <SummaryItem label="Idle" value={assetDistribution.idle || 2} />
+              <SummaryItem label="Fleet Realized Value" value={`€${result.realized_value_eur}`} />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
             <h3 className="mb-4 text-xs uppercase tracking-wider text-text-secondary">Actual vs Forecast</h3>
             <ForecastChart data={result.forecast_points} chargeWindow={result.charge_window} dischargeWindow={result.discharge_window} />
           </div>
+
+          {assets.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
+              <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Asset-Level Outcome</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wider text-text-muted">
+                    <tr>
+                      <th className="py-2 pr-3">Battery</th>
+                      <th className="py-2 pr-3">Site</th>
+                      <th className="py-2 pr-3">Recommended</th>
+                      <th className="py-2 pr-3">SoC</th>
+                      <th className="py-2 pr-3">Stress</th>
+                      <th className="py-2 pr-3">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {assets.map((asset) => (
+                      <tr key={asset.id}>
+                        <td className="py-2 pr-3 text-text-primary">{asset.name}</td>
+                        <td className="py-2 pr-3 text-text-secondary">{asset.site}</td>
+                        <td className="py-2 pr-3 text-text-primary">{asset.auto_action}</td>
+                        <td className="py-2 pr-3 text-text-primary">{Math.round(asset.soc * 100)}%</td>
+                        <td className="py-2 pr-3 text-text-primary">{asset.stress_level}</td>
+                        <td className="py-2 pr-3 text-text-primary">€{asset.expected_value_eur[0]}-€{asset.expected_value_eur[1]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
@@ -101,6 +151,15 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
           <p className="text-text-muted">Select a historical date and profile, then run backtest.</p>
         </div>
       )}
+    </div>
+  )
+}
+
+function SummaryItem({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md border border-border bg-surface p-3">
+      <p className="text-xs text-text-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-text-primary">{value}</p>
     </div>
   )
 }

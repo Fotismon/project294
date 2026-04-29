@@ -10,12 +10,20 @@ import {
   BackendScheduleResponse,
   BackendScenarioRequest,
   BackendScenarioResponse,
+  BatteryAction,
+  BatteryAsset,
   BatteryProfile,
   BacktestRequest,
   BacktestResponse,
   Confidence,
   Decision,
   ForecastPoint,
+  FleetBulkActionRequest,
+  FleetRecommendation,
+  FleetRecommendationRequest,
+  FleetResponse,
+  FleetSummary,
+  PatchBatteryActionRequest,
   RiskAppetite,
   ScenarioRequest,
   ScheduleResponse,
@@ -25,6 +33,7 @@ import {
   getScenarioModifiedResponse,
   mockAlerts,
   mockBacktestResult,
+  mockFleetAssets,
   mockForecastData,
   mockScheduleResponse
 } from './mock-data'
@@ -41,6 +50,28 @@ const DEFAULT_BATTERY: BatteryProfile = {
   current_soc: 0.5,
   round_trip_efficiency: 0.88,
   max_cycles_per_day: 1
+}
+
+function effectiveFleetAction(asset: BatteryAsset): Exclude<BatteryAction, 'auto'> {
+  return asset.selected_action === 'auto' ? asset.auto_action : asset.selected_action
+}
+
+function mapFleetSummary(assets: BatteryAsset[]): FleetSummary {
+  const actions = assets.map(effectiveFleetAction)
+  const autoActions = Array.from(new Set(assets.filter((asset) => asset.status !== 'offline').map((asset) => asset.auto_action)))
+
+  return {
+    total_assets: assets.length,
+    available_assets: assets.filter((asset) => asset.status !== 'offline').length,
+    total_capacity_mwh: assets.reduce((sum, asset) => sum + asset.capacity_mwh, 0),
+    total_power_mw: assets.reduce((sum, asset) => sum + asset.power_mw, 0),
+    average_soc: assets.reduce((sum, asset) => sum + asset.soc, 0) / Math.max(assets.length, 1),
+    forecast_driven_action: autoActions.length === 1 ? autoActions[0] : 'mixed',
+    assets_charging: actions.filter((action) => action === 'charge').length,
+    assets_discharging: actions.filter((action) => action === 'discharge').length,
+    assets_idle: actions.filter((action) => action === 'idle').length,
+    expected_value_eur: assets.reduce<[number, number]>((range, asset) => [range[0] + asset.expected_value_eur[0], range[1] + asset.expected_value_eur[1]], [0, 0])
+  }
 }
 
 function buildBatteryProfile(overrides: Partial<BatteryProfile> = {}): BatteryProfile {
@@ -332,6 +363,75 @@ export async function runBacktest(payload: BacktestRequest): Promise<BacktestRes
 
 export async function getAlerts(): Promise<Alert[]> {
   return API_BASE_URL ? mockAlerts : mockAlerts
+}
+
+export async function getFleet(): Promise<FleetResponse> {
+  if (!API_BASE_URL) {
+    return { assets: mockFleetAssets, summary: mapFleetSummary(mockFleetAssets) }
+  }
+
+  try {
+    return await fetchJson<FleetResponse>('/fleet')
+  } catch (error) {
+    console.warn('Fleet API unavailable, falling back to mock data:', error)
+    return { assets: mockFleetAssets, summary: mapFleetSummary(mockFleetAssets) }
+  }
+}
+
+export async function getFleetRecommendation(payload: FleetRecommendationRequest): Promise<FleetRecommendation> {
+  const fallbackSummary = mapFleetSummary(payload.assets)
+
+  if (!API_BASE_URL) {
+    return {
+      summary: fallbackSummary,
+      manual_override_count: payload.assets.filter((asset) => asset.selected_action !== 'auto').length,
+      override_value_delta_eur: [0, 0],
+      warnings: []
+    }
+  }
+
+  try {
+    return await fetchJson<FleetRecommendation>('/fleet/recommendation', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  } catch (error) {
+    console.warn('Fleet recommendation API unavailable, falling back to local summary:', error)
+    return {
+      summary: fallbackSummary,
+      manual_override_count: payload.assets.filter((asset) => asset.selected_action !== 'auto').length,
+      override_value_delta_eur: [0, 0],
+      warnings: []
+    }
+  }
+}
+
+export async function patchFleetAssetAction(id: string, payload: PatchBatteryActionRequest): Promise<BatteryAsset | null> {
+  if (!API_BASE_URL) return null
+
+  try {
+    return await fetchJson<BatteryAsset>(`/fleet/assets/${id}/action`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    })
+  } catch (error) {
+    console.warn('Fleet asset action API unavailable, keeping local override:', error)
+    return null
+  }
+}
+
+export async function runFleetBulkAction(payload: FleetBulkActionRequest): Promise<FleetResponse | null> {
+  if (!API_BASE_URL) return null
+
+  try {
+    return await fetchJson<FleetResponse>('/fleet/bulk-action', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  } catch (error) {
+    console.warn('Fleet bulk action API unavailable, keeping local overrides:', error)
+    return null
+  }
 }
 
 export function isUsingMockData(): boolean {
