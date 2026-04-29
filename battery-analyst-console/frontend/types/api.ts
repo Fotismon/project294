@@ -96,8 +96,8 @@ export interface SoCFeasibility {
   start_soc: number
   end_soc: number
   violations: string[]
-  min_soc_reached?: number
-  max_soc_reached?: number
+  min_soc_reached: number
+  max_soc_reached: number
 }
 
 export interface BatteryStress {
@@ -128,9 +128,9 @@ export interface AlternativeSchedule {
   discharge_window: Window
   expected_value_range_eur?: number[]
   reason?: string
-  spread_after_efficiency?: number
-  decision?: Decision
-  rejection_reasons?: string[]
+  spread_after_efficiency: number
+  decision: Decision
+  rejection_reasons: string[]
 }
 
 export interface ForecastPoint {
@@ -139,12 +139,12 @@ export interface ForecastPoint {
   lower_bound?: number
   upper_bound?: number
   confidence?: string
-  p10_price?: number
-  p50_price?: number
-  p90_price?: number
-  actual_price?: number | null
-  action?: 'charge' | 'discharge' | 'hold'
-  soc?: number
+  p10_price: number
+  p50_price: number
+  p90_price: number
+  actual_price: number | null
+  action: 'charge' | 'discharge' | 'hold'
+  soc: number
 }
 
 export interface ScheduleResponse {
@@ -372,4 +372,3 @@ export interface BackendBacktestResponse {
 
 // The real backend /scenario endpoint now returns BackendScheduleResponse.
 export type BackendScenarioResponse = BackendScheduleResponse
-

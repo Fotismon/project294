@@ -212,7 +212,7 @@ export default function Home() {
     setIsBacktestRunning(true)
     setError(null)
     try {
-      const result = await runBacktest({ date: backtestDate, battery_profile: backtestProfile })
+      const result = await runBacktest({ date: backtestDate, profile_name: backtestProfile, battery_profile: backtestProfile })
       setBacktestResult(result)
     } catch {
       setError('Backtest API failed. Showing mock backtest result.')

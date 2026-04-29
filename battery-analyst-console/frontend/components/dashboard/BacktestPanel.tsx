@@ -26,6 +26,12 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
     discharge: assets.filter((asset) => asset.auto_action === 'discharge').length,
     idle: assets.filter((asset) => asset.auto_action === 'idle').length
   }
+  const expectedValue = result?.expected_value_eur ?? 0
+  const realizedValue = result?.realized_value_eur ?? 0
+  const actualSpread = result?.actual_spread ?? 0
+  const recommendationQuality = result?.recommendation_quality ?? 'fair'
+  const explanation = Array.isArray(result?.explanation) ? result.explanation.join(' ') : ''
+  const forecastPoints = result?.forecast_points ?? []
 
   return (
     <div className="space-y-6">
@@ -68,9 +74,9 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <MetricCard label="Historical Decision" value={formatDecision(result.decision)} variant={result.decision === 'execute' ? 'success' : 'warning'} size="sm" />
-            <MetricCard label="Expected Value" value={`€${result.expected_value_eur}`} size="sm" />
-            <MetricCard label="Realized Value" value={`€${result.realized_value_eur}`} variant={result.realized_value_eur >= result.expected_value_eur * 0.8 ? 'success' : 'warning'} size="sm" />
-            <MetricCard label="Actual Spread" value={result.actual_spread.toFixed(1)} unit="€/MWh" size="sm" />
+            <MetricCard label="Expected Value" value={`€${expectedValue}`} size="sm" />
+            <MetricCard label="Realized Value" value={`€${realizedValue}`} variant={realizedValue >= expectedValue * 0.8 ? 'success' : 'warning'} size="sm" />
+            <MetricCard label="Actual Spread" value={actualSpread.toFixed(1)} unit="€/MWh" size="sm" />
           </div>
 
           <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
@@ -80,13 +86,13 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
               <SummaryItem label="Charge" value={assetDistribution.charge || 4} />
               <SummaryItem label="Discharge" value={assetDistribution.discharge || 2} />
               <SummaryItem label="Idle" value={assetDistribution.idle || 2} />
-              <SummaryItem label="Fleet Realized Value" value={`€${result.realized_value_eur}`} />
+              <SummaryItem label="Fleet Realized Value" value={`€${realizedValue}`} />
             </div>
           </div>
 
           <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
             <h3 className="mb-4 text-xs uppercase tracking-wider text-text-secondary">Actual vs Forecast</h3>
-            <ForecastChart data={result.forecast_points} chargeWindow={result.charge_window} dischargeWindow={result.discharge_window} />
+            <ForecastChart data={forecastPoints} chargeWindow={result.charge_window ?? undefined} dischargeWindow={result.discharge_window ?? undefined} />
           </div>
 
           {assets.length > 0 && (
@@ -127,22 +133,22 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-xs text-text-muted">Charge Window</p>
-                  <p className="text-text-primary">{result.charge_window.start}-{result.charge_window.end}</p>
-                  <p className="text-xs text-text-muted">@ {result.charge_window.avg_price} €/MWh</p>
+                  <p className="text-text-primary">{result.charge_window ? `${result.charge_window.start}-${result.charge_window.end}` : 'No trade'}</p>
+                  <p className="text-xs text-text-muted">@ {result.charge_window?.realized_avg_price ?? 0} €/MWh realized</p>
                 </div>
                 <div>
                   <p className="text-xs text-text-muted">Discharge Window</p>
-                  <p className="text-text-primary">{result.discharge_window.start}-{result.discharge_window.end}</p>
-                  <p className="text-xs text-text-muted">@ {result.discharge_window.avg_price} €/MWh</p>
+                  <p className="text-text-primary">{result.discharge_window ? `${result.discharge_window.start}-${result.discharge_window.end}` : 'No trade'}</p>
+                  <p className="text-xs text-text-muted">@ {result.discharge_window?.realized_avg_price ?? 0} €/MWh realized</p>
                 </div>
               </div>
             </div>
             <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
               <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Recommendation Quality</h3>
               <span className="mb-3 inline-block rounded bg-success/10 px-3 py-1 text-sm font-medium text-success">
-                {formatDecision(result.recommendation_quality)}
+                {formatDecision(recommendationQuality)}
               </span>
-              <p className="text-sm leading-relaxed text-text-secondary">{result.explanation}</p>
+              <p className="text-sm leading-relaxed text-text-secondary">{explanation}</p>
             </div>
           </div>
         </div>
