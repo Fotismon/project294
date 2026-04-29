@@ -19,6 +19,11 @@ function decisionVariant(decision: ScheduleResponse['decision']) {
   return 'error'
 }
 
+function windowValue(window: ScheduleResponse['charge_window']): string {
+  if (window.start === window.end) return 'No trade'
+  return `${window.start}-${window.end}`
+}
+
 export function RecommendationCards({ schedule }: RecommendationCardsProps) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
@@ -26,13 +31,13 @@ export function RecommendationCards({ schedule }: RecommendationCardsProps) {
       <MetricCard label="Confidence" value={titleCase(schedule.confidence)} size="sm" />
       <MetricCard
         label="Charge Window"
-        value={`${schedule.charge_window.start}-${schedule.charge_window.end}`}
+        value={windowValue(schedule.charge_window)}
         subValue={`@ ${schedule.charge_window.avg_price} €/MWh`}
         size="sm"
       />
       <MetricCard
         label="Discharge Window"
-        value={`${schedule.discharge_window.start}-${schedule.discharge_window.end}`}
+        value={windowValue(schedule.discharge_window)}
         subValue={`@ ${schedule.discharge_window.avg_price} €/MWh`}
         size="sm"
       />

@@ -169,8 +169,11 @@ function mapAlternative(alt: BackendAlternativeSchedule, fallbackDecision: Decis
   const valueRange = rangeFrom(alt.expected_value_range_eur, mockScheduleResponse.expected_value_range_eur)
 
   return {
+    label: alt.label,
     charge_window: alt.charge_window ?? mockScheduleResponse.charge_window,
     discharge_window: alt.discharge_window ?? mockScheduleResponse.discharge_window,
+    expected_value_range_eur: alt.expected_value_range_eur,
+    reason: alt.reason,
     spread_after_efficiency: Math.max(0, valueRange[1] - valueRange[0]),
     decision: fallbackDecision === 'execute' ? 'execute_with_caution' : 'watch',
     rejection_reasons: [alt.label, alt.reason].filter(Boolean)

@@ -124,8 +124,8 @@ export interface Alert {
 
 export interface AlternativeSchedule {
   label?: string
-  charge_window: Window
-  discharge_window: Window
+  charge_window: Window | null
+  discharge_window: Window | null
   expected_value_range_eur?: number[]
   reason?: string
   spread_after_efficiency: number

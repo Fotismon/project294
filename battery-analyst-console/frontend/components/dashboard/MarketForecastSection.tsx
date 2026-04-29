@@ -12,6 +12,8 @@ interface MarketForecastSectionProps {
 }
 
 export function MarketForecastSection({ forecastData, schedule, currentSignal }: MarketForecastSectionProps) {
+  const hasTradeWindows = schedule.charge_window.start !== schedule.charge_window.end && schedule.discharge_window.start !== schedule.discharge_window.end
+
   return (
     <section className="space-y-4">
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
@@ -43,7 +45,9 @@ export function MarketForecastSection({ forecastData, schedule, currentSignal }:
           <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
             <p className="text-xs uppercase tracking-wider text-text-secondary">Reason</p>
             <p className="mt-2 text-sm leading-relaxed text-text-primary">
-              Charge during {schedule.charge_window.start}-{schedule.charge_window.end}, then discharge during {schedule.discharge_window.start}-{schedule.discharge_window.end} if asset constraints remain acceptable.
+              {hasTradeWindows
+                ? `Charge during ${schedule.charge_window.start}-${schedule.charge_window.end}, then discharge during ${schedule.discharge_window.start}-${schedule.discharge_window.end} if asset constraints remain acceptable.`
+                : 'No executable charge/discharge windows are currently recommended.'}
             </p>
           </div>
         </div>

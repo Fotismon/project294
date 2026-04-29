@@ -28,19 +28,17 @@ export function SoCFeasibilityCard({ feasibility }: SoCFeasibilityCardProps) {
           <p className="text-text-primary">{pct(feasibility.end_soc)}</p>
         </div>
         <div>
-          <p className="text-xs text-text-muted">Min SoC Reached</p>
-          <p className="text-text-primary">{pct(feasibility.min_soc_reached)}</p>
+          <p className="text-xs text-text-muted">Allowed Range</p>
+          <p className="text-text-primary">{pct(feasibility.min_soc)}-{pct(feasibility.max_soc)}</p>
         </div>
         <div>
-          <p className="text-xs text-text-muted">Max SoC Reached</p>
-          <p className="text-text-primary">{pct(feasibility.max_soc_reached)}</p>
+          <p className="text-xs text-text-muted">Violations</p>
+          <p className="text-text-primary">{feasibility.violations.length}</p>
         </div>
       </div>
-      {feasibility.violations.length > 0 && (
-        <div className="mt-3 border-t border-border pt-3 text-xs text-error">
-          {feasibility.violations.join(', ')}
-        </div>
-      )}
+      <div className={`mt-3 border-t border-border pt-3 text-xs ${feasibility.violations.length > 0 ? 'text-error' : 'text-text-muted'}`}>
+        {feasibility.violations.length > 0 ? feasibility.violations.join(', ') : 'No SoC violations returned.'}
+      </div>
     </div>
   )
 }
