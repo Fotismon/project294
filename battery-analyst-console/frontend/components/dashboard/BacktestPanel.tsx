@@ -201,7 +201,7 @@ export function BacktestPanel({
               <MissingHistoricalDataState />
             )}
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
               <MetricCard
                 label="Decision"
                 value={<DecisionBadge decision={result.decision} size="md" />}
@@ -352,7 +352,7 @@ function EconomicResult({
   return (
     <div className="border border-border bg-surface p-4">
       <p className="text-xs uppercase tracking-wider text-text-secondary">Economic result</p>
-      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <MetricCard
           label="Forecast spread"
           value={formatSpread(result.forecast_spread_after_efficiency)}

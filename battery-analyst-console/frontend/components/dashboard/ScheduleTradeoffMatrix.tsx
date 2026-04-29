@@ -166,7 +166,9 @@ export function ScheduleTradeoffMatrix({ schedule, className = '' }: ScheduleTra
                       <td className="px-3 py-3 align-top">
                         <StatusBadge label={row.status} tone={row.status === 'Recommended' ? 'positive' : 'neutral'} />
                       </td>
-                      <td className="max-w-[320px] px-3 py-3 align-top text-text-secondary">{row.reason}</td>
+                      <td className="max-w-[260px] px-3 py-3 align-top text-text-secondary">
+                        <p className="max-h-16 overflow-hidden" title={row.reason}>{row.reason}</p>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

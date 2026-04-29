@@ -10,7 +10,7 @@ interface FleetSummaryCardsProps {
 
 export function FleetSummaryCards({ summary }: FleetSummaryCardsProps) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-9">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-9">
       <MetricCard label="Total Assets" value={summary.total_assets} size="sm" />
       <MetricCard label="Available" value={summary.available_assets} size="sm" variant={summary.available_assets === summary.total_assets ? 'success' : 'warning'} />
       <MetricCard label="Capacity" value={summary.total_capacity_mwh.toFixed(0)} unit="MWh" size="sm" />

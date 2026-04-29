@@ -86,21 +86,21 @@ export function BatteryAssetTable({
   return (
     <div className="border border-border bg-surface-elevated/50">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1280px] text-left text-sm">
+        <table className="w-full min-w-[1120px] text-left text-sm">
           <thead className="border-b border-border bg-surface text-xs uppercase tracking-wider text-text-muted">
             <tr>
-              <th className="w-12 px-3 py-3">Select</th>
-              <th className="px-3 py-3">Asset</th>
-              <th className="px-3 py-3">Site</th>
-              <th className="px-3 py-3">Status</th>
-              <th className="px-3 py-3">SoC</th>
-              <th className="px-3 py-3">Temperature</th>
-              <th className="px-3 py-3">Stress</th>
-              <th className="px-3 py-3">Auto action</th>
-              <th className="px-3 py-3">Selected action</th>
-              <th className="px-3 py-3">Expected value</th>
-              <th className="px-3 py-3">Warnings</th>
-              <th className="px-3 py-3">Open detail</th>
+              <th className="w-10 px-2 py-2.5">Select</th>
+              <th className="px-2 py-2.5">Asset</th>
+              <th className="px-2 py-2.5">Site</th>
+              <th className="px-2 py-2.5">Status</th>
+              <th className="px-2 py-2.5">SoC</th>
+              <th className="px-2 py-2.5">Temperature</th>
+              <th className="px-2 py-2.5">Stress</th>
+              <th className="px-2 py-2.5">Auto action</th>
+              <th className="px-2 py-2.5">Selected action</th>
+              <th className="px-2 py-2.5">Expected value</th>
+              <th className="px-2 py-2.5">Warnings</th>
+              <th className="px-2 py-2.5">Open detail</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -120,7 +120,7 @@ export function BatteryAssetTable({
                     detailSelected ? 'border-info bg-info/5' : isManual ? 'border-transparent bg-warning/5' : 'border-transparent'
                   }`}
                 >
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-2 py-2.5 align-top">
                     <input
                       type="checkbox"
                       checked={selected}
@@ -129,16 +129,16 @@ export function BatteryAssetTable({
                       aria-label={`Select ${asset.name}`}
                     />
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-2 py-2.5 align-top">
                     <div className="font-medium text-text-primary">{asset.name}</div>
                     <div className="mt-0.5 text-xs text-text-muted">{asset.id}</div>
                   </td>
-                  <td className="px-3 py-3 align-top text-text-secondary">{asset.site}</td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-2 py-2.5 align-top text-text-secondary">{asset.site}</td>
+                  <td className="px-2 py-2.5 align-top">
                     <StatusBadge label={asset.status.toUpperCase()} tone={statusTone(asset.status)} dot />
                   </td>
-                  <td className="px-3 py-3 align-top">
-                    <div className="w-24">
+                  <td className="px-2 py-2.5 align-top">
+                    <div className="w-20">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium text-text-primary">{formatPercent(asset.soc)}</span>
                       </div>
@@ -147,17 +147,17 @@ export function BatteryAssetTable({
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-2 py-2.5 align-top">
                     <StatusBadge label={formatTemperature(asset.temperature_c)} tone={temperatureTone(asset.temperature_c)} />
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-2 py-2.5 align-top">
                     <StressBadge level={asset.stress_level} />
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-2 py-2.5 align-top">
                     <StatusBadge label={actionLabel(asset.auto_action)} tone={actionTone(asset.auto_action)} dot />
                   </td>
-                  <td className="px-3 py-3 align-top">
-                    <div className="min-w-32">
+                  <td className="px-2 py-2.5 align-top">
+                    <div className="min-w-28">
                       <BatteryActionSelector
                         value={asset.selected_action}
                         onChange={(action) => onActionChange(asset.id, action)}
@@ -169,10 +169,10 @@ export function BatteryAssetTable({
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-3 align-top font-medium text-text-primary">{formatEuroRange(asset.expected_value_eur)}</td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-2 py-2.5 align-top font-medium text-text-primary">{formatEuroRange(asset.expected_value_eur)}</td>
+                  <td className="px-2 py-2.5 align-top">
                     {warningCount > 0 ? (
-                      <div className="max-w-[240px]">
+                      <div className="max-w-[180px]">
                         <StatusBadge label={`${warningCount} warning${warningCount === 1 ? '' : 's'}`} tone="warning" />
                         <p className="mt-1 truncate text-xs text-text-secondary" title={asset.constraint_warnings.join('; ')}>
                           {firstWarning}
@@ -182,7 +182,7 @@ export function BatteryAssetTable({
                       <StatusBadge label="None" tone="positive" />
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-2 py-2.5 align-top">
                     <button
                       type="button"
                       disabled={!detailEnabled}

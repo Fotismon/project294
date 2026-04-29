@@ -116,7 +116,7 @@ export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
           title="Operational Risk Center"
           subtitle="Alerts reflect the latest schedule or scenario result."
         >
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <MetricCard label="Critical" value={0} />
             <MetricCard label="Warning" value={0} />
             <MetricCard label="Info" value={0} />
@@ -164,7 +164,7 @@ export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
         title="Operational Risk Center"
         subtitle="Alerts reflect the latest schedule or scenario result."
       >
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <MetricCard label="Critical" value={grouped.critical.length} tone={grouped.critical.length > 0 ? 'critical' : 'neutral'} />
           <MetricCard label="Warning" value={grouped.warning.length} tone={grouped.warning.length > 0 ? 'warning' : 'neutral'} />
           <MetricCard label="Info" value={grouped.info.length} tone={grouped.info.length > 0 ? 'info' : 'neutral'} />

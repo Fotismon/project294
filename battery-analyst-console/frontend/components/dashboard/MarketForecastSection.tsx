@@ -95,7 +95,7 @@ export function MarketForecastSection({ forecastData, schedule, currentSignal }:
       action={<StatusBadge label="Resolution: 15 minutes · Horizon: 24 hours" tone="neutral" />}
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
           <MetricCard label="Decision" value={<DecisionBadge decision={schedule.decision} size="md" />} />
           <MetricCard label="Confidence" value={<ConfidenceBadge confidence={schedule.confidence} size="md" />} />
           <MetricCard label="Spread after efficiency" value={formatSpread(schedule.spread_after_efficiency)} tone="info" />

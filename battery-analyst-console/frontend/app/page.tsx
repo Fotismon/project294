@@ -498,7 +498,7 @@ export default function Home() {
 
             <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
               <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Impact Preview</h3>
-              <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
+              <div className="grid grid-cols-2 gap-3 text-sm xl:grid-cols-5">
                 <PreviewItem label="Assets Affected" value={fleetAssets.length} />
                 <PreviewItem label="Fleet Value" value={`€${fleetSummary.expected_value_eur[0]}-€${fleetSummary.expected_value_eur[1]}`} />
                 <PreviewItem label="Stress Low/Med/High" value={`${stressDistribution.low}/${stressDistribution.medium}/${stressDistribution.high}`} />

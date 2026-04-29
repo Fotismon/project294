@@ -114,7 +114,7 @@ export function FleetOverview({
         <p className="mt-1 text-sm text-text-secondary">Portfolio decision, market signal, asset actions, and operational risk.</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 min-[1440px]:grid-cols-6">
         <MetricCard label="Decision" value={<DecisionBadge decision={schedule.decision} size="md" />} />
         <MetricCard label="Confidence" value={<ConfidenceBadge confidence={schedule.confidence} size="md" />} />
         <MetricCard label="Expected value" value={formatEuroRange(schedule.expected_value_range_eur)} tone="positive" />
@@ -123,7 +123,7 @@ export function FleetOverview({
         <MetricCard label="Battery stress" value={<StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} size="md" />} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)]">
+      <div className="grid grid-cols-1 gap-6 min-[1440px]:grid-cols-[minmax(0,2fr)_minmax(320px,0.9fr)]">
         <div className="space-y-6">
           {schedule.decision === 'hold' && (
             <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />

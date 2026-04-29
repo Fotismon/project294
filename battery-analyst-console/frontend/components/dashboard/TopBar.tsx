@@ -40,28 +40,28 @@ export function TopBar({
   const statusStyle = apiStatus ? statusClasses[apiStatus.kind] : null
 
   return (
-    <header className="border-b border-border bg-background/95 px-5 py-4 lg:px-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <header className="border-b border-border bg-background/95 px-5 py-3 lg:px-6">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-text-primary">{title}</h1>
-          <p className="mt-1 text-sm text-text-secondary">{subtitle}</p>
+          <h1 className="truncate text-lg font-semibold tracking-tight text-text-primary">{title}</h1>
+          <p className="mt-1 truncate text-sm text-text-secondary">{subtitle}</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="border border-border bg-surface px-3 py-2 font-medium text-text-secondary">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs xl:justify-end">
+          <span className="shrink-0 border border-border bg-surface px-3 py-1.5 font-medium text-text-secondary">
             {marketZone}
           </span>
           {currentDateLabel && (
-            <span className="border border-border bg-surface px-3 py-2 text-text-secondary">
+            <span className="shrink-0 border border-border bg-surface px-3 py-1.5 text-text-secondary">
               {currentDateLabel}
             </span>
           )}
           {apiStatus && statusStyle && (
-            <span className="flex items-center gap-2 border border-border bg-surface px-3 py-2">
+            <span className="flex min-w-0 items-center gap-2 border border-border bg-surface px-3 py-1.5">
               <span className={`h-2 w-2 rounded-full ${statusStyle.dot}`} />
-              <span className={`font-medium ${statusStyle.text}`}>{apiStatus.message}</span>
+              <span className={`truncate font-medium ${statusStyle.text}`}>{apiStatus.message}</span>
               {apiStatus.last_updated_at && (
-                <span className="text-text-muted">Updated {apiStatus.last_updated_at}</span>
+                <span className="shrink-0 text-text-muted">Updated {apiStatus.last_updated_at}</span>
               )}
             </span>
           )}

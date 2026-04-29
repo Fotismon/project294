@@ -11,7 +11,7 @@ export function FleetRecommendationSummary({ recommendation }: FleetRecommendati
   return (
     <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
       <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Recommendation Summary</h3>
-      <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 text-sm xl:grid-cols-5">
         <SummaryItem label="Charge" value={recommendation.summary.assets_charging} />
         <SummaryItem label="Discharge" value={recommendation.summary.assets_discharging} />
         <SummaryItem label="Idle" value={recommendation.summary.assets_idle} />

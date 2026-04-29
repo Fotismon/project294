@@ -43,7 +43,7 @@ export function RecommendationCards({ schedule }: RecommendationCardsProps) {
         <ConfidenceBadge confidence={schedule.confidence} size="md" />
         <StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} size="md" />
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <MetricCard
           label="Expected value"
           value={formatCurrencyRange(schedule.expected_value_range_eur)}

@@ -214,7 +214,7 @@ export function ScenarioComparisonPanel({
 
         <div>
           <h4 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Result deltas</h4>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
             <MetricCard
               label="Decision changed?"
               value={decisionChanged ? 'Yes' : 'No'}

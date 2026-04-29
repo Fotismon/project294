@@ -32,7 +32,7 @@ export function DashboardShell({
             currentDateLabel={currentDateLabel}
             marketZone={marketZone}
           />
-          <main className="flex-1 overflow-x-hidden px-4 py-5 lg:px-6 lg:py-6">
+          <main className="min-w-0 flex-1 overflow-x-hidden px-5 py-5 lg:px-5 lg:py-5 xl:px-6">
             {children}
           </main>
         </div>

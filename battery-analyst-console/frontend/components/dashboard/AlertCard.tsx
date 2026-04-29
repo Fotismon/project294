@@ -50,9 +50,9 @@ export function AlertCard({ alert, relatedMetric }: AlertCardProps) {
           </div>
           <p className="mt-3 text-sm leading-relaxed text-text-secondary">{alert.message}</p>
         </div>
-        <div className="shrink-0 border border-border bg-surface-elevated/40 px-3 py-2">
+        <div className="max-w-[220px] shrink-0 border border-border bg-surface-elevated/40 px-3 py-2">
           <p className="text-xs uppercase tracking-wider text-text-muted">Related metric</p>
-          <p className="mt-1 text-xs font-medium text-text-primary">{metric}</p>
+          <p className="mt-1 truncate text-xs font-medium text-text-primary" title={metric}>{metric}</p>
         </div>
       </div>
       <div className="mt-4 border-t border-border pt-3">

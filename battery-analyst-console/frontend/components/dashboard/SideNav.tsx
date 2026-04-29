@@ -45,8 +45,8 @@ const navItems: SideNavItem[] = [
 
 export function SideNav({ activeSection, onSectionChange }: SideNavProps) {
   return (
-    <aside className="border-b border-border bg-surface lg:sticky lg:top-0 lg:h-screen lg:w-[260px] lg:shrink-0 lg:border-b-0 lg:border-r">
-      <div className="border-b border-border px-5 py-4">
+    <aside className="border-b border-border bg-surface lg:sticky lg:top-0 lg:h-screen lg:w-[232px] lg:shrink-0 lg:border-b-0 lg:border-r">
+      <div className="border-b border-border px-4 py-4">
         <p className="text-xs uppercase tracking-wider text-text-muted">Operations Console</p>
         <p className="mt-1 text-sm font-semibold text-text-primary">Battery Trading</p>
       </div>
@@ -59,7 +59,7 @@ export function SideNav({ activeSection, onSectionChange }: SideNavProps) {
               key={item.id}
               type="button"
               onClick={() => onSectionChange(item.id)}
-              className={`min-w-[190px] border-l-2 px-3 py-3 text-left transition lg:w-full ${
+              className={`min-w-[180px] border-l-2 px-3 py-2.5 text-left transition lg:w-full ${
                 isActive
                   ? 'border-info bg-surface-elevated text-text-primary'
                   : 'border-transparent text-text-secondary hover:border-border hover:bg-surface-elevated/50 hover:text-text-primary'
