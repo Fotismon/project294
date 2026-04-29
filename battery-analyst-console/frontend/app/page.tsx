@@ -13,8 +13,8 @@ import { MarketForecastSection } from '@/components/dashboard/MarketForecastSect
 import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
 import { RecommendationSection } from '@/components/dashboard/RecommendationSection'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
-import { TabId, TabNav } from '@/components/dashboard/TabNav'
-import { clearApiFallback, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, isUsingMockData, runBacktest, runScenario } from '@/lib/api'
+import { ConsoleSectionId } from '@/components/dashboard/SideNav'
+import { clearApiFallback, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, runBacktest, runScenario } from '@/lib/api'
 import { mockAlerts, mockFleetAssets, mockForecastData, mockScheduleResponse } from '@/lib/mock-data'
 import { buildDefaultSchedulerInput } from '@/lib/sample-inputs'
 import {
@@ -129,7 +129,7 @@ function calculateFleetRecommendation(assets: BatteryAsset[], summary: FleetSumm
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<TabId>('today')
+  const [activeSection, setActiveSection] = useState<ConsoleSectionId>('fleet')
   const [scheduleData, setScheduleData] = useState<ScheduleResponse>(mockScheduleResponse)
   const [forecastData, setForecastData] = useState<ForecastPoint[]>(mockForecastData)
   const [alerts, setAlerts] = useState<Alert[]>(mockAlerts)
@@ -368,30 +368,23 @@ export default function Home() {
   }
 
   return (
-    <DashboardShell>
-      <header className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-text-primary">Battery Analyst Console</h1>
-          <p className="mt-1 text-sm text-text-secondary">Forecasting is a commodity. Decision support is the product.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-lg border border-border bg-surface-elevated px-3 py-1 text-sm text-text-secondary">Athens {formatDate(todayAthens())}</span>
-          <span className="rounded-lg border border-border bg-surface-elevated px-3 py-1 text-sm text-text-secondary">{isUsingMockData() ? 'Mock data' : 'API first'}</span>
-        </div>
-      </header>
-
-      <ApiStatusBanner status={apiStatus} />
-
-      <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
+    <DashboardShell
+      activeSection={activeSection}
+      onSectionChange={setActiveSection}
+      apiStatus={apiStatus}
+      currentDateLabel={`Athens ${formatDate(todayAthens())}`}
+      marketZone="GR Day-Ahead"
+    >
+      {apiStatus.kind !== 'connected' && <ApiStatusBanner status={apiStatus} />}
 
       {(isLoading || error) && (
-        <div className="mt-4 rounded-lg border border-border bg-surface-elevated/50 px-4 py-3 text-sm text-text-secondary">
+        <div className="mb-4 border border-border bg-surface-elevated/50 px-4 py-3 text-sm text-text-secondary">
           {isLoading ? 'Loading schedule, forecast, and alerts...' : error}
         </div>
       )}
 
-      <main className="mt-6">
-        {activeTab === 'today' && (
+      <div>
+        {activeSection === 'fleet' && (
           <div className="space-y-8">
             <SectionHeader title="Today's Plan" subtitle={`${formatDate(scheduleData.date)} · Europe/Athens operating day`} />
             <MarketForecastSection forecastData={forecastData} schedule={scheduleData} currentSignal={fleetSummary.forecast_driven_action} />
@@ -409,7 +402,23 @@ export default function Home() {
           </div>
         )}
 
-        {activeTab === 'scenario' && (
+        {activeSection === 'assets' && (
+          <div className="space-y-6">
+            <SectionHeader title="Battery Assets" subtitle="Asset-level dispatch controls and fleet operating state." />
+            <FleetManagerSection
+              assets={fleetAssets}
+              summary={fleetSummary}
+              selectedIds={selectedAssetIds}
+              onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
+              onClearSelection={() => setSelectedAssetIds([])}
+              onToggleSelected={handleToggleSelected}
+              onApplyAction={handleApplyBulkAction}
+              onAssetActionChange={handleAssetActionChange}
+            />
+          </div>
+        )}
+
+        {activeSection === 'scenario' && (
           <div className="space-y-6">
             <SectionHeader title="Scenario Analyst" subtitle="Test operating assumptions before committing a battery schedule." />
             <ScenarioControls
@@ -454,14 +463,14 @@ export default function Home() {
           </div>
         )}
 
-        {activeTab === 'alerts' && (
+        {activeSection === 'alerts' && (
           <div className="space-y-6">
             <SectionHeader title="Alerts" subtitle="Operational risks from the latest schedule or scenario." />
             <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />
           </div>
         )}
 
-        {activeTab === 'backtest' && (
+        {activeSection === 'backtest' && (
           <div className="space-y-6">
             <SectionHeader title="Backtest" subtitle="Replay historical recommendations against realized prices." />
             <BacktestPanel
@@ -476,7 +485,7 @@ export default function Home() {
             />
           </div>
         )}
-      </main>
+      </div>
     </DashboardShell>
   )
 }
