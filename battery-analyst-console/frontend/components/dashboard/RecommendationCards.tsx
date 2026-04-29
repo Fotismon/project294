@@ -23,7 +23,7 @@ function formatCurrencyRange(range: [number, number] | number[]): string {
 }
 
 function formatSpread(value: number): string {
-  return `${value.toFixed(2)} EUR/MWh`
+  return `${value.toFixed(1)} EUR/MWh`
 }
 
 function formatPrice(value: number): string {
@@ -31,7 +31,7 @@ function formatPrice(value: number): string {
 }
 
 function windowValue(window: ScheduleResponse['charge_window']): string {
-  if (window.start === window.end) return 'No trade'
+  if (window.start === window.end || (window.start === '00:00' && window.end === '00:00')) return 'No trade'
   return `${window.start}-${window.end}`
 }
 

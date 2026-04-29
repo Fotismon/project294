@@ -121,9 +121,7 @@ export function FleetOverview({
             />
           </SectionPanel>
 
-          <SectionPanel title="Fleet Recommendation" subtitle="Decision rationale, constraints, alternatives, and fleet dispatch context.">
-            <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
-          </SectionPanel>
+          <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
 
           <SectionPanel title="Battery Assets" subtitle="Asset-level status, controls, and operating decision.">
             <FleetManagerSection
