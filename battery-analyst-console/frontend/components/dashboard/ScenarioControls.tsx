@@ -125,7 +125,7 @@ export function ScenarioControls({
             isRunning ? 'cursor-not-allowed bg-surface-elevated text-text-muted' : 'bg-info text-white hover:bg-info/80'
           }`}
         >
-          {isRunning ? 'Running...' : 'Run Scenario'}
+          {isRunning ? 'Recomputing...' : 'Recompute recommendation'}
         </button>
       </div>
     </div>

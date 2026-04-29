@@ -45,7 +45,7 @@ function humanizeConfidence(value: string): string {
 }
 
 function summaryCopy(schedule: ScheduleResponse): string {
-  if (schedule.decision === 'hold') return 'No-action is recommended because the tradeoff is not economically or physically attractive.'
+  if (schedule.decision === 'hold') return 'No action is recommended because the forecasted spread does not compensate for round-trip efficiency losses and degradation risk.'
   if (schedule.battery_stress.level === 'high') return 'Higher value may come with elevated battery stress; review alternatives before execution.'
   return 'Recommended schedule balances expected value with stress and feasibility constraints.'
 }
@@ -99,7 +99,7 @@ export function ScheduleTradeoffMatrix({ schedule, className = '' }: ScheduleTra
 
   return (
     <SectionPanel
-      title="Profit vs Asset Health"
+      title="Profit vs asset health"
       subtitle="Compare candidate schedules by expected value, battery stress, and decision quality."
       className={className}
     >
@@ -113,7 +113,7 @@ export function ScheduleTradeoffMatrix({ schedule, className = '' }: ScheduleTra
           <div className="space-y-3">
             <EmptyState
               title="No executable tradeoff"
-              message="The current recommendation is hold, so no charge/discharge schedule should be compared as executable."
+              message="The current recommendation is hold, so no charge/discharge schedule should be treated as executable."
             />
             <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div className="border border-border bg-surface p-3">
@@ -183,7 +183,7 @@ export function ScheduleTradeoffMatrix({ schedule, className = '' }: ScheduleTra
             )}
 
             <p className="text-xs leading-relaxed text-text-muted">
-              Alternative stress and confidence are approximated from the selected schedule until per-alternative scoring is exposed by the backend.
+              Per-alternative stress and confidence are approximated until backend scoring is available.
             </p>
           </>
         )}

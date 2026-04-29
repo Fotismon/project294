@@ -107,7 +107,7 @@ function valueOption(schedule: ScheduleResponse, alternative: AlternativeSchedul
 
 function storyText(schedule: ScheduleResponse, alternative: AlternativeSchedule | null): string {
   if (schedule.decision === 'hold') {
-    return 'No-action is the health-aware decision. Forecasted spread does not compensate for round-trip efficiency losses and degradation risk.'
+    return 'Hold operation is the health-aware recommendation. Forecasted spread does not compensate for round-trip efficiency losses and degradation risk.'
   }
 
   const alternativeValue = alternative?.expected_value_range_eur
@@ -202,7 +202,7 @@ export function ProfitHealthComparisonCard({ schedule, className = '' }: ProfitH
 
   return (
     <SectionPanel
-      title="Profit vs Asset Health"
+      title="Profit vs asset health"
       subtitle="Compare immediate value against long-term battery stress."
       className={className}
     >

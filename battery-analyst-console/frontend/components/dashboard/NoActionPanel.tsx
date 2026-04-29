@@ -78,7 +78,7 @@ function buildRiskBullets(schedule: ScheduleResponse): string[] {
     `Battery stress is ${schedule.battery_stress.level} with score ${schedule.battery_stress.score}.`,
     schedule.soc_feasibility.feasible
       ? `SoC feasibility passed from ${formatPercent(schedule.soc_feasibility.start_soc)} to ${formatPercent(schedule.soc_feasibility.end_soc)}, but economics still do not justify dispatch.`
-      : `SoC feasibility failed with ${schedule.soc_feasibility.violations.length} violation(s).`,
+      : `SoC feasibility has ${schedule.soc_feasibility.violations.length} violation(s).`,
     physicalConstraintsHaveIssues(schedule)
       ? 'Physical constraints require review.'
       : 'Physical constraints do not block the hold recommendation.',
@@ -109,7 +109,7 @@ function alertTone(alert: Alert): 'critical' | 'warning' | 'info' {
 
 export function NoActionPanel({ schedule, className = '' }: NoActionPanelProps) {
   const isHold = schedule.decision === 'hold'
-  const title = isHold ? 'No Action Recommended' : 'No-action review'
+  const title = isHold ? 'No action recommended' : 'No-action review'
   const usefulReason = firstUsefulReason(schedule)
   const riskBullets = buildRiskBullets(schedule)
   const holdReasons = buildHoldReasons(schedule)
@@ -179,7 +179,7 @@ export function NoActionPanel({ schedule, className = '' }: NoActionPanelProps) 
         <div className="border border-info/30 bg-info/10 p-4">
           <h4 className="text-xs uppercase tracking-wider text-info">Recommended next step</h4>
           <p className="mt-2 text-sm font-medium text-text-primary">
-            Keep the fleet idle, monitor updated forecasts, and rerun the scenario if prices, temperature, or risk appetite change.
+            Hold operation, monitor updated forecasts, and recompute the recommendation if prices, temperature, or risk appetite change.
           </p>
           <p className="mt-2 text-sm text-text-secondary">
             Wait for a stronger spread after efficiency or use Scenario Analyst to compare relaxed, normal, or strict temperature policy.

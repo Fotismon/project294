@@ -107,7 +107,7 @@ function MissingHistoricalDataState() {
       />
       <div className="mt-4 space-y-3 text-sm text-text-secondary">
         <p>
-          The backtest backend needs 96 interval rows for the selected date. The UI is currently showing fallback data.
+          The backtest backend needs 96 interval rows for the selected date. Until historical data is available, the interface may show demo fallback results.
         </p>
         <p>Real backtesting is disabled until historical price data is provided.</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -117,7 +117,7 @@ function MissingHistoricalDataState() {
         </div>
         <p className="text-xs text-text-muted">
           Create battery-analyst-console/data/market_prices.csv with 96 rows per date. Until then, the UI may display
-          mock fallback results for demo continuity.
+          demo fallback results for continuity.
         </p>
       </div>
     </div>
@@ -181,7 +181,7 @@ export function BacktestPanel({
                 : 'border-info bg-info text-white hover:bg-info/80'
             }`}
           >
-            {isRunning ? 'Running...' : 'Run Backtest'}
+            {isRunning ? 'Running backtest...' : 'Run backtest'}
           </button>
         </div>
       </SectionPanel>
@@ -192,7 +192,7 @@ export function BacktestPanel({
       >
         {!result ? (
           <EmptyState
-            title="No backtest run yet"
+            title="Ready for historical replay"
             message="Select a historical date and run a backtest to compare forecasted and realized economics."
           />
         ) : (
@@ -221,7 +221,7 @@ export function BacktestPanel({
                 label="Realized value"
                 value={formatEuro(realizedValue(result))}
                 tone={realizedValue(result) >= 0 ? 'positive' : 'warning'}
-                helperText={isHold ? 'No trade executed.' : 'Historical trade value.'}
+                helperText={isHold ? 'No dispatch executed.' : 'Historical dispatch value.'}
               />
               <MetricCard
                 label="Value error"

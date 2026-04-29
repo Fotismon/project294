@@ -142,7 +142,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const [apiStatus, setApiStatus] = useState<ApiStatus>({
     kind: 'loading',
-    message: 'Loading backend data...'
+    message: 'Loading operating data...'
   })
 
   const [roundTripEfficiency, setRoundTripEfficiency] = useState(90)
@@ -180,7 +180,7 @@ export default function Home() {
       setError(null)
       setApiStatus({
         kind: 'loading',
-        message: 'Loading backend data...'
+        message: 'Loading operating data...'
       })
       clearApiFallback()
       try {
@@ -196,20 +196,20 @@ export default function Home() {
         if (!hasConfiguredApiBaseUrl()) {
           setApiStatus({
             kind: 'mock',
-            message: 'Using mock fallback',
-            detail: 'NEXT_PUBLIC_API_BASE_URL is not configured.'
+            message: 'Using demo fallback',
+            detail: 'NEXT_PUBLIC_API_BASE_URL is not configured. Demo forecast input is being used for scheduler calls.'
           })
         } else if (fallback) {
           setApiStatus({
             kind: 'error',
-            message: 'API error - using mock fallback',
+            message: 'Live API unavailable — using demo fallback',
             detail: fallback.message,
             last_updated_at: currentStatusTime()
           })
         } else {
           setApiStatus({
             kind: 'connected',
-            message: 'Backend connected',
+            message: 'Live backend connected',
             detail: 'Using live schedule and forecast responses.',
             last_updated_at: currentStatusTime()
           })
@@ -217,13 +217,13 @@ export default function Home() {
       } catch (loadError) {
         if (!mounted) return
         const detail = loadError instanceof Error ? loadError.message : String(loadError)
-        setError('Unable to load live API data. Showing local mock data.')
+        setError('Unable to load live API data. Using demo forecast input.')
         setScheduleData(mockScheduleResponse)
         setForecastData(mockForecastData)
         setAlerts(scheduleAlertsOrFallback(mockScheduleResponse, mockAlerts))
         setApiStatus({
           kind: 'error',
-          message: 'API error - using mock fallback',
+          message: 'Live API unavailable — using demo fallback',
           detail,
           last_updated_at: currentStatusTime()
         })
@@ -255,7 +255,7 @@ export default function Home() {
     setError(null)
     setApiStatus({
       kind: 'loading',
-      message: 'Running scenario...',
+      message: 'Recomputing recommendation...',
       detail: 'Calling /scenario with current assumptions.'
     })
     clearApiFallback()
@@ -289,30 +289,30 @@ export default function Home() {
       if (!hasConfiguredApiBaseUrl()) {
         setApiStatus({
           kind: 'mock',
-          message: 'Using mock fallback',
-          detail: 'NEXT_PUBLIC_API_BASE_URL is not configured.'
+          message: 'Using demo fallback',
+          detail: 'NEXT_PUBLIC_API_BASE_URL is not configured. Demo forecast input is being used for scheduler calls.'
         })
       } else if (fallback) {
         setApiStatus({
           kind: 'error',
-          message: 'Scenario API error - using mock fallback',
+          message: 'Scenario service unavailable — using demo fallback',
           detail: fallback.message,
           last_updated_at: currentStatusTime()
         })
       } else {
         setApiStatus({
           kind: 'connected',
-          message: 'Backend connected',
+          message: 'Live backend connected',
           detail: 'Scenario result returned from /scenario.',
           last_updated_at: currentStatusTime()
         })
       }
     } catch (scenarioError) {
       const detail = scenarioError instanceof Error ? scenarioError.message : String(scenarioError)
-      setError('Scenario API failed. Local mock scenario is still available.')
+      setError('Scenario service unavailable. Demo scenario input remains available.')
       setApiStatus({
         kind: 'error',
-        message: 'Scenario API error - using mock fallback',
+        message: 'Scenario service unavailable — using demo fallback',
         detail,
         last_updated_at: currentStatusTime()
       })
@@ -345,31 +345,31 @@ export default function Home() {
       if (!hasConfiguredApiBaseUrl()) {
         setApiStatus({
           kind: 'mock',
-          message: 'Using mock fallback',
+          message: 'Using demo fallback',
           detail: 'NEXT_PUBLIC_API_BASE_URL is not configured.'
         })
       } else if (fallback) {
-        setError('Backtest data unavailable. Showing mock backtest result.')
+        setError('Backtest data unavailable. Showing demo fallback result.')
         setApiStatus({
           kind: 'error',
-          message: 'Backtest API error - using mock fallback',
+          message: 'Backtest data unavailable — using demo fallback',
           detail: backtestFallbackDetail(fallback.message),
           last_updated_at: currentStatusTime()
         })
       } else {
         setApiStatus({
           kind: 'connected',
-          message: 'Backend connected',
+          message: 'Live backend connected',
           detail: 'Backtest result returned from /backtest.',
           last_updated_at: currentStatusTime()
         })
       }
     } catch (backtestError) {
       const detail = backtestError instanceof Error ? backtestError.message : String(backtestError)
-      setError('Backtest data unavailable. Showing mock backtest result.')
+      setError('Backtest data unavailable. Showing demo fallback result.')
       setApiStatus({
         kind: 'error',
-        message: 'Backtest API error - using mock fallback',
+        message: 'Backtest data unavailable — using demo fallback',
         detail: backtestFallbackDetail(detail),
         last_updated_at: currentStatusTime()
       })
@@ -390,7 +390,7 @@ export default function Home() {
 
       {(isLoading || error) && (
         <div className="mb-4 border border-border bg-surface-elevated/50 px-4 py-3 text-sm text-text-secondary">
-          {isLoading ? 'Loading schedule, forecast, and alerts...' : error}
+          {isLoading ? 'Loading schedule, forecast, and operational alerts...' : error}
         </div>
       )}
 
@@ -466,7 +466,7 @@ export default function Home() {
                 <div className="border border-border bg-surface-elevated/50 p-4">
                   <p className="text-xs uppercase tracking-wider text-text-secondary">Result summary</p>
                   <p className="mt-1 text-sm text-text-muted">
-                    {scenarioResult ? 'Latest scenario result is now the active schedule.' : 'Run a scenario to compare against the base case.'}
+                    {scenarioResult ? 'Latest scenario result is now the active schedule.' : 'Recompute a recommendation to compare against the base case.'}
                   </p>
                 </div>
 

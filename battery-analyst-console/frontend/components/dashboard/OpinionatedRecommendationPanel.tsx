@@ -79,7 +79,7 @@ function buildRecommendationBullets(schedule: ScheduleResponse): string[] {
     `Battery stress is ${schedule.battery_stress.level} with score ${schedule.battery_stress.score}.`,
     schedule.soc_feasibility.feasible
       ? `SoC feasibility passed with end SoC at ${formatPercent(schedule.soc_feasibility.end_soc)}.`
-      : `SoC feasibility failed with ${schedule.soc_feasibility.violations.length} violation(s).`,
+      : `SoC feasibility has ${schedule.soc_feasibility.violations.length} violation(s).`,
     physicalConstraintsPassed(schedule)
       ? 'Physical constraints passed.'
       : 'One or more physical constraints require review.',
@@ -103,7 +103,7 @@ function buildOperatorNextStep(schedule: ScheduleResponse): string {
   }
 
   if (schedule.decision === 'watch') {
-    return 'Do not dispatch automatically; monitor updated forecasts or rerun scenario assumptions.'
+    return 'Do not dispatch automatically; monitor updated forecasts or recompute the recommendation with revised assumptions.'
   }
 
   if (schedule.decision === 'hold') {
@@ -120,8 +120,8 @@ export function OpinionatedRecommendationPanel({ schedule, className = '' }: Opi
 
   return (
     <SectionPanel
-      title="Analyst View"
-      subtitle="Opinionated reasoning behind the recommended action."
+      title="Analyst view"
+      subtitle="Operational reasoning behind the recommended action."
       className={className}
     >
       <div className="space-y-4">
@@ -133,8 +133,8 @@ export function OpinionatedRecommendationPanel({ schedule, className = '' }: Opi
 
         {schedule.decision === 'hold' && (
           <div className="border border-warning/30 bg-warning/10 p-3">
-            <p className="text-sm font-medium text-warning">No action is the recommendation.</p>
-            <p className="mt-1 text-sm text-text-secondary">Forecasted spread does not compensate for round-trip efficiency and degradation risk.</p>
+            <p className="text-sm font-medium text-warning">No action recommended.</p>
+            <p className="mt-1 text-sm text-text-secondary">Forecasted spread does not compensate for round-trip efficiency losses and degradation risk.</p>
           </div>
         )}
 
@@ -156,7 +156,7 @@ export function OpinionatedRecommendationPanel({ schedule, className = '' }: Opi
 
         {backendReasoning.length > 0 && (
           <div className="border-t border-border pt-4">
-            <h4 className="mb-2 text-xs uppercase tracking-wider text-text-secondary">Backend reasoning</h4>
+            <h4 className="mb-2 text-xs uppercase tracking-wider text-text-secondary">Scheduler reasoning</h4>
             <ul className="space-y-1">
               {backendReasoning.map((reason) => (
                 <li key={reason} className="text-xs text-text-muted">- {reason}</li>

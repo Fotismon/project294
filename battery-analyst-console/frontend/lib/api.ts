@@ -396,7 +396,7 @@ export async function getForecast(date: string): Promise<ForecastPoint[]> {
   try {
     return mapForecast(await fetchJson<BackendForecastResponse>(`/forecast?date=${date}`))
   } catch (error) {
-    console.warn('Forecast API unavailable, falling back to mock data:', error)
+    console.warn('Forecast API unavailable, using demo fallback data:', error)
     recordApiFallback('/forecast', error)
     return mockForecastData
   }
@@ -420,7 +420,7 @@ export async function getSchedule(date: string, batteryProfile?: RiskAppetite | 
       body: JSON.stringify(scheduleRequest(date, batteryProfile, forecastOverrides))
     }))
   } catch (error) {
-    console.warn('Schedule API unavailable, falling back to mock data:', error)
+    console.warn('Schedule API unavailable, using demo fallback data:', error)
     recordApiFallback('/schedule', error)
     return mockScheduleResponse
   }
@@ -445,7 +445,7 @@ export async function runScenario(payload: ScenarioRequest, baseline: ScheduleRe
     })
     return mapSchedule(scenario)
   } catch (error) {
-    console.warn('Scenario API unavailable, falling back to mock data:', error)
+    console.warn('Scenario API unavailable, using demo fallback data:', error)
     recordApiFallback('/scenario', error)
     return getScenarioModifiedResponse(
       scenarioEfficiencyPercent(payload.round_trip_efficiency),
@@ -469,11 +469,11 @@ export async function runBacktest(payload: BacktestRequest): Promise<BacktestRes
       })
     )
   } catch (error) {
-    console.warn('Backtest API unavailable, falling back to mock data:', error)
+    console.warn('Backtest API unavailable, using demo fallback data:', error)
     recordApiFallback('/backtest', error)
     return {
       ...mockBacktestResult,
-      warnings: ['Backtest data unavailable. Showing mock backtest result.', ...mockBacktestResult.warnings]
+      warnings: ['Backtest data unavailable. Showing demo fallback result.', ...mockBacktestResult.warnings]
     }
   }
 }
@@ -492,7 +492,7 @@ export async function getFleet(): Promise<FleetResponse> {
   try {
     return await fetchJson<FleetResponse>('/fleet')
   } catch (error) {
-    console.warn('Fleet API unavailable, falling back to mock data:', error)
+    console.warn('Fleet API unavailable, using demo fallback data:', error)
     recordApiFallback('/fleet', error)
     return { assets: mockFleetAssets, summary: mapFleetSummary(mockFleetAssets) }
   }

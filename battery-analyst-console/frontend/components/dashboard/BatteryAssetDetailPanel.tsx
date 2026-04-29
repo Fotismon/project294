@@ -108,9 +108,9 @@ function buildAssetWarnings(asset: BatteryAsset, schedule: ScheduleResponse): st
     warnings.push(`Temperature warning: asset is at ${asset.temperature_c}°C.`)
   }
 
-  if (!schedule.physical_constraints.duration_ok) warnings.push('Duration constraint failed.')
-  if (!schedule.physical_constraints.cycle_limit_ok) warnings.push('Cycle limit constraint failed.')
-  if (!schedule.physical_constraints.temperature_ok) warnings.push('Temperature constraint failed.')
+  if (!schedule.physical_constraints.duration_ok) warnings.push('Duration constraint requires review.')
+  if (!schedule.physical_constraints.cycle_limit_ok) warnings.push('Cycle limit requires review.')
+  if (!schedule.physical_constraints.temperature_ok) warnings.push('Temperature constraint requires review.')
   if (!schedule.physical_constraints.rapid_switching_avoided) warnings.push('Rapid switching was not avoided.')
 
   schedule.soc_feasibility.violations.forEach((violation) => warnings.push(violation))
@@ -169,7 +169,7 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
             <StatusBadge label={`ID ${asset.id}`} tone="neutral" />
           </div>
           <p className="mt-3 text-sm leading-relaxed text-text-secondary">
-            This asset-level view maps the fleet recommendation to the selected battery. Per-asset optimization is approximated until fleet scheduling is implemented.
+            This asset-level recommendation context maps the fleet decision to the selected battery. Per-asset optimization is approximated until fleet scheduling is implemented.
           </p>
         </div>
 
@@ -185,7 +185,7 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
           <div className="space-y-3">
             {scheduleHold && (
               <div className="border border-warning/30 bg-warning/10 p-3">
-                <p className="text-sm font-medium text-warning">No action for this asset</p>
+                <p className="text-sm font-medium text-warning">No action recommended for this asset</p>
                 <p className="mt-1 text-sm text-text-secondary">
                   {schedule.explanation[0] || 'Forecasted spread does not compensate for round-trip efficiency losses and degradation risk.'}
                 </p>
@@ -217,7 +217,7 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
           </div>
         </DetailBlock>
 
-        <DetailBlock title="Schedule Context For This Asset">
+        <DetailBlock title="Schedule context for this asset">
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
               <DecisionBadge decision={schedule.decision} />
@@ -290,7 +290,7 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
               <StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} />
               <StatusBadge label={`Asset stress marker: ${asset.stress_level}`} tone={asset.stress_level === 'high' ? 'critical' : asset.stress_level === 'medium' ? 'warning' : 'positive'} />
             </div>
-            <p className="text-xs text-text-muted">Schedule-level stress context. Asset stress is a fleet table marker until per-asset backend stress scoring is implemented.</p>
+            <p className="text-xs text-text-muted">Schedule-level stress context. Asset stress is a fleet table marker until per-asset backend stress scoring is available.</p>
             {stressReasons.length > 0 ? (
               <ul className="space-y-1">
                 {stressReasons.map((reason) => (
@@ -315,7 +315,7 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
           )}
         </DetailBlock>
 
-        <DetailBlock title="Fleet-Level Decision → Asset Impact">
+        <DetailBlock title="Fleet-level decision to asset impact">
           <p className="text-sm leading-relaxed text-text-secondary">
             The fleet recommendation is mapped to this battery using the current asset state, selected action, stress marker, and schedule constraints. Per-asset optimization is approximated in the frontend until fleet-level scheduling is implemented in the backend.
           </p>
