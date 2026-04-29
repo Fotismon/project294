@@ -386,7 +386,7 @@ export default function Home() {
       <div>
         {activeSection === 'fleet' && (
           <div className="space-y-8">
-            <SectionHeader title="Today's Plan" subtitle={`${formatDate(scheduleData.date)} · Europe/Athens operating day`} />
+            <SectionHeader title="Fleet Overview" subtitle={`${formatDate(scheduleData.date)} · Europe/Athens operating day`} />
             <MarketForecastSection forecastData={forecastData} schedule={scheduleData} currentSignal={fleetSummary.forecast_driven_action} />
             <FleetManagerSection
               assets={fleetAssets}
@@ -404,7 +404,7 @@ export default function Home() {
 
         {activeSection === 'assets' && (
           <div className="space-y-6">
-            <SectionHeader title="Battery Assets" subtitle="Asset-level dispatch controls and fleet operating state." />
+            <SectionHeader title="Battery Assets" subtitle="Asset-level controls, status, and operating decisions." />
             <FleetManagerSection
               assets={fleetAssets}
               summary={fleetSummary}
@@ -415,6 +415,10 @@ export default function Home() {
               onApplyAction={handleApplyBulkAction}
               onAssetActionChange={handleAssetActionChange}
             />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <ConstraintPanel constraints={scheduleData.physical_constraints} />
+              <BatteryStressCard stress={scheduleData.battery_stress} />
+            </div>
           </div>
         )}
 
