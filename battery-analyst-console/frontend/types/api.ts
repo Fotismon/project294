@@ -8,6 +8,18 @@ export type BatteryStressLevel = 'low' | 'medium' | 'high'
 export type RiskAppetite = 'conservative' | 'balanced' | 'aggressive'
 export type TemperaturePolicy = 'permissive' | 'balanced' | 'conservative'
 
+export interface BatteryProfile {
+  battery_id: string
+  capacity_kwh: number
+  max_charge_kw: number
+  max_discharge_kw: number
+  min_soc: number
+  max_soc: number
+  current_soc: number
+  round_trip_efficiency: number
+  max_cycles_per_day: number
+}
+
 // Time window
 export interface Window {
   start: string
@@ -120,3 +132,112 @@ export interface BacktestResponse {
 }
 
 export type BacktestResult = BacktestResponse
+
+export interface BackendForecastPoint {
+  timestamp: string
+  predicted_price: number
+  lower_bound: number
+  upper_bound: number
+  confidence: string
+}
+
+export interface BackendForecastResponse {
+  date: string
+  market: string
+  country: string
+  unit: string
+  points: BackendForecastPoint[]
+}
+
+export interface BackendScheduleRequest {
+  date: string
+  battery: BatteryProfile
+  strategy: 'spread_capture'
+  market: 'day_ahead'
+  country: 'GR'
+}
+
+export interface BackendSoCFeasibility {
+  feasible: boolean
+  min_soc: number
+  max_soc: number
+  start_soc: number
+  end_soc: number
+  violations: string[]
+}
+
+export interface BackendPhysicalConstraints {
+  duration_ok: boolean
+  cycle_limit_ok: boolean
+  temperature_ok: boolean
+  round_trip_efficiency_applied: boolean
+  rapid_switching_avoided: boolean
+}
+
+export interface BackendAlert {
+  level: string
+  message: string
+  metric: string | null
+}
+
+export interface BackendAlternativeSchedule {
+  label: string
+  charge_window: Window | null
+  discharge_window: Window | null
+  expected_value_range_eur: number[]
+  reason: string
+}
+
+export interface BackendScheduleResponse {
+  date: string
+  decision: string
+  confidence: string
+  charge_window: Window
+  discharge_window: Window
+  spread_after_efficiency: number
+  expected_value_range_eur: number[]
+  soc_feasibility: BackendSoCFeasibility
+  battery_stress: BatteryStress
+  physical_constraints: BackendPhysicalConstraints
+  alternatives: BackendAlternativeSchedule[]
+  alerts: BackendAlert[]
+  explanation: string[]
+}
+
+export interface BackendScenarioRequest {
+  date: string
+  battery: BatteryProfile
+  price_multiplier: number
+  efficiency_override: number | null
+  notes?: string
+}
+
+export interface BackendScenarioResponse {
+  date: string
+  scenario_name: string
+  decision: string
+  expected_value_range_eur: number[]
+  key_changes: string[]
+  explanation: string[]
+}
+
+export interface BackendBacktestRequest {
+  start_date: string
+  end_date: string
+  battery: BatteryProfile
+  strategy: 'spread_capture'
+}
+
+export interface BackendBacktestResponse {
+  start_date: string
+  end_date: string
+  strategy: string
+  summary: {
+    total_days: number
+    profitable_days: number
+    skipped_days: number
+    total_expected_value_eur: number
+    average_daily_value_eur: number
+  }
+  notes: string[]
+}

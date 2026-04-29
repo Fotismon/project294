@@ -1,97 +1,307 @@
-// Battery Analyst Console - API Client
-
-import { ScheduleResponse, ForecastPoint, ScenarioRequest, BacktestRequest, BacktestResponse } from '@/types/api'
-import { 
-  mockScheduleResponse, 
-  mockForecastData, 
-  mockAlerts, 
+import {
+  Alert,
+  AlternativeSchedule,
+  BackendAlert,
+  BackendAlternativeSchedule,
+  BackendBacktestRequest,
+  BackendBacktestResponse,
+  BackendForecastResponse,
+  BackendScheduleRequest,
+  BackendScheduleResponse,
+  BackendScenarioRequest,
+  BackendScenarioResponse,
+  BatteryProfile,
+  BacktestRequest,
+  BacktestResponse,
+  Confidence,
+  Decision,
+  ForecastPoint,
+  RiskAppetite,
+  ScenarioRequest,
+  ScheduleResponse,
+  Severity
+} from '@/types/api'
+import {
+  getScenarioModifiedResponse,
+  mockAlerts,
   mockBacktestResult,
-  getScenarioModifiedResponse 
+  mockForecastData,
+  mockScheduleResponse
 } from './mock-data'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ''
 
-// Fetch forecast data
+const DEFAULT_BATTERY: BatteryProfile = {
+  battery_id: 'battery-001',
+  capacity_kwh: 1000,
+  max_charge_kw: 500,
+  max_discharge_kw: 500,
+  min_soc: 0.1,
+  max_soc: 0.9,
+  current_soc: 0.5,
+  round_trip_efficiency: 0.88,
+  max_cycles_per_day: 1
+}
+
+function buildBatteryProfile(overrides: Partial<BatteryProfile> = {}): BatteryProfile {
+  return { ...DEFAULT_BATTERY, ...overrides }
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...init?.headers
+    }
+  })
+
+  if (!response.ok) {
+    throw new Error(`API error ${response.status} for ${path}`)
+  }
+
+  return response.json() as Promise<T>
+}
+
+function asDecision(value: string | undefined): Decision {
+  if (value === 'execute' || value === 'execute_with_caution' || value === 'watch' || value === 'hold') {
+    return value
+  }
+  return 'watch'
+}
+
+function asConfidence(value: string | undefined): Confidence {
+  if (value === 'high' || value === 'medium_high' || value === 'medium' || value === 'low') {
+    return value
+  }
+  return 'medium'
+}
+
+function asSeverity(value: string | undefined): Severity {
+  if (value === 'critical' || value === 'warning' || value === 'info') {
+    return value
+  }
+  if (value === 'error' || value === 'danger') return 'critical'
+  return 'info'
+}
+
+function rangeFrom(values: number[] | undefined, fallback: [number, number]): [number, number] {
+  if (!values?.length) return fallback
+  if (values.length === 1) return [Math.round(values[0]), Math.round(values[0])]
+  return [Math.round(values[0]), Math.round(values[1])]
+}
+
+function hourOf(timestamp: string): number {
+  const parsed = new Date(timestamp)
+  if (!Number.isNaN(parsed.getTime())) return parsed.getHours()
+  const match = timestamp.match(/T(\d{2}):/)
+  return match ? Number(match[1]) : 0
+}
+
+function mapForecast(response: BackendForecastResponse): ForecastPoint[] {
+  return response.points.map((point) => {
+    const hour = hourOf(point.timestamp)
+    const action: ForecastPoint['action'] = hour >= 11 && hour < 13 ? 'charge' : hour >= 20 && hour < 22 ? 'discharge' : 'hold'
+
+    return {
+      timestamp: point.timestamp,
+      p10_price: point.lower_bound,
+      p50_price: point.predicted_price,
+      p90_price: point.upper_bound,
+      actual_price: null,
+      action,
+      soc: action === 'charge' ? 0.62 : action === 'discharge' ? 0.74 : 0.5
+    }
+  })
+}
+
+function mapBackendAlert(alert: BackendAlert): Alert {
+  return {
+    severity: asSeverity(alert.level),
+    title: alert.metric ? alert.metric.replace(/_/g, ' ') : `${alert.level || 'info'} alert`,
+    message: alert.message,
+    recommended_action: alert.level === 'warning' ? 'Review assumptions before execution.' : 'Monitor this signal.'
+  }
+}
+
+function mapAlternative(alt: BackendAlternativeSchedule, fallbackDecision: Decision): AlternativeSchedule {
+  const valueRange = rangeFrom(alt.expected_value_range_eur, mockScheduleResponse.expected_value_range_eur)
+
+  return {
+    charge_window: alt.charge_window ?? mockScheduleResponse.charge_window,
+    discharge_window: alt.discharge_window ?? mockScheduleResponse.discharge_window,
+    spread_after_efficiency: Math.max(0, valueRange[1] - valueRange[0]),
+    decision: fallbackDecision === 'execute' ? 'execute_with_caution' : 'watch',
+    rejection_reasons: [alt.label, alt.reason].filter(Boolean)
+  }
+}
+
+function mapSchedule(response: BackendScheduleResponse): ScheduleResponse {
+  const decision = asDecision(response.decision)
+
+  return {
+    date: response.date,
+    decision,
+    confidence: asConfidence(response.confidence),
+    charge_window: response.charge_window,
+    discharge_window: response.discharge_window,
+    spread_after_efficiency: response.spread_after_efficiency,
+    expected_value_range_eur: rangeFrom(response.expected_value_range_eur, mockScheduleResponse.expected_value_range_eur),
+    soc_feasibility: {
+      feasible: response.soc_feasibility.feasible,
+      start_soc: response.soc_feasibility.start_soc,
+      end_soc: response.soc_feasibility.end_soc,
+      min_soc_reached: response.soc_feasibility.min_soc,
+      max_soc_reached: response.soc_feasibility.max_soc,
+      violations: response.soc_feasibility.violations ?? []
+    },
+    battery_stress: {
+      level: response.battery_stress.level === 'low' || response.battery_stress.level === 'medium' || response.battery_stress.level === 'high'
+        ? response.battery_stress.level
+        : 'medium',
+      score: response.battery_stress.score,
+      reasons: response.battery_stress.reasons ?? []
+    },
+    physical_constraints: {
+      duration_ok: response.physical_constraints.duration_ok,
+      cycle_limit_ok: response.physical_constraints.cycle_limit_ok,
+      temperature_ok: response.physical_constraints.temperature_ok,
+      soc_feasible: response.soc_feasibility.feasible,
+      round_trip_efficiency_applied: response.physical_constraints.round_trip_efficiency_applied,
+      rapid_switching_avoided: response.physical_constraints.rapid_switching_avoided
+    },
+    alternatives: (response.alternatives ?? []).map((alternative) => mapAlternative(alternative, decision)),
+    alerts: (response.alerts ?? []).map(mapBackendAlert),
+    explanation: response.explanation ?? []
+  }
+}
+
+function scheduleRequest(date: string, overrides: Partial<BatteryProfile> = {}): BackendScheduleRequest {
+  return {
+    date,
+    battery: buildBatteryProfile(overrides),
+    strategy: 'spread_capture',
+    market: 'day_ahead',
+    country: 'GR'
+  }
+}
+
+function scenarioRequest(payload: ScenarioRequest): BackendScenarioRequest {
+  return {
+    date: payload.date,
+    battery: buildBatteryProfile({
+      round_trip_efficiency: payload.round_trip_efficiency / 100,
+      max_cycles_per_day: payload.max_cycles_per_day
+    }),
+    price_multiplier: payload.risk_appetite === 'aggressive' ? 1.12 : payload.risk_appetite === 'conservative' ? 0.92 : 1,
+    efficiency_override: payload.round_trip_efficiency / 100,
+    notes: `duration=${payload.battery_duration_hours}h; degradation=${payload.degradation_cost_eur_per_cycle}; temperature=${payload.temperature_policy}`
+  }
+}
+
+function mergeScenarioIntoSchedule(response: BackendScenarioResponse, baseline: ScheduleResponse): ScheduleResponse {
+  return {
+    ...baseline,
+    date: response.date,
+    decision: asDecision(response.decision),
+    expected_value_range_eur: rangeFrom(response.expected_value_range_eur, baseline.expected_value_range_eur),
+    alerts: [
+      ...baseline.alerts,
+      {
+        severity: 'info',
+        title: response.scenario_name.replace(/_/g, ' '),
+        message: response.key_changes.join(' '),
+        recommended_action: 'Compare this scenario against the base schedule before dispatch.'
+      }
+    ],
+    explanation: response.explanation.length > 0 ? response.explanation : baseline.explanation
+  }
+}
+
+function backtestRequest(payload: BacktestRequest): BackendBacktestRequest {
+  const endDate = payload.date
+  const start = new Date(`${payload.date}T12:00:00`)
+  start.setDate(start.getDate() - 29)
+
+  return {
+    start_date: start.toISOString().slice(0, 10),
+    end_date: endDate,
+    battery: buildBatteryProfile({
+      max_cycles_per_day: payload.battery_profile === 'aggressive' ? 2 : 1,
+      round_trip_efficiency: payload.battery_profile === 'conservative' ? 0.9 : 0.88
+    }),
+    strategy: 'spread_capture'
+  }
+}
+
+function mapBacktest(response: BackendBacktestResponse, requestedDate: string): BacktestResponse {
+  const total = Math.round(response.summary.total_expected_value_eur)
+  const realized = Math.round(response.summary.average_daily_value_eur * response.summary.profitable_days)
+
+  return {
+    date: requestedDate,
+    decision: response.summary.profitable_days > response.summary.skipped_days ? 'execute' : 'watch',
+    charge_window: mockBacktestResult.charge_window,
+    discharge_window: mockBacktestResult.discharge_window,
+    expected_value_eur: total,
+    realized_value_eur: realized,
+    actual_spread: Math.round(response.summary.average_daily_value_eur * 10) / 10,
+    recommendation_quality: response.summary.profitable_days / Math.max(response.summary.total_days, 1) > 0.65 ? 'good' : 'fair',
+    explanation: response.notes.join(' '),
+    forecast_points: mockBacktestResult.forecast_points
+  }
+}
+
 export async function getForecast(date: string): Promise<ForecastPoint[]> {
-  if (!API_BASE_URL) {
-    console.log('Using mock forecast data')
-    return mockForecastData
-  }
-  
+  if (!API_BASE_URL) return mockForecastData
+
   try {
-    const response = await fetch(`${API_BASE_URL}/forecast?date=${date}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    })
-    
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`)
-    }
-    
-    return await response.json()
+    return mapForecast(await fetchJson<BackendForecastResponse>('/forecast'))
   } catch (error) {
-    console.warn('API unavailable, falling back to mock data:', error)
+    console.warn('Forecast API unavailable, falling back to mock data:', error)
     return mockForecastData
   }
 }
 
-// Fetch schedule response
-export async function getSchedule(date: string, batteryProfile?: string): Promise<ScheduleResponse> {
-  if (!API_BASE_URL) {
-    console.log('Using mock schedule data')
-    return mockScheduleResponse
-  }
-  
-  try {
-    const params = new URLSearchParams({ date })
-    if (batteryProfile) {
-      params.append('battery_profile', batteryProfile)
-    }
-    
-    const response = await fetch(`${API_BASE_URL}/schedule?${params}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    })
-    
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`)
-    }
-    
-    return await response.json()
-  } catch (error) {
-    console.warn('API unavailable, falling back to mock data:', error)
-    return mockScheduleResponse
-  }
-}
+export async function getSchedule(date: string, batteryProfile?: RiskAppetite | string): Promise<ScheduleResponse> {
+  if (!API_BASE_URL) return mockScheduleResponse
 
-// Run scenario analysis
-export async function runScenario(payload: ScenarioRequest): Promise<ScheduleResponse> {
-  if (!API_BASE_URL) {
-    console.log('Using mock scenario data')
-    return getScenarioModifiedResponse(
-      payload.round_trip_efficiency,
-      payload.battery_duration_hours,
-      payload.max_cycles_per_day,
-      payload.risk_appetite,
-      payload.temperature_policy,
-      payload.degradation_cost_eur_per_cycle
-    )
-  }
-  
   try {
-    const response = await fetch(`${API_BASE_URL}/scenario`, {
+    const profileOverrides: Partial<BatteryProfile> = {
+      max_cycles_per_day: batteryProfile === 'aggressive' ? 2 : 1,
+      round_trip_efficiency: batteryProfile === 'conservative' ? 0.9 : 0.88
+    }
+
+    return mapSchedule(await fetchJson<BackendScheduleResponse>('/schedule', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`)
-    }
-    
-    return await response.json()
+      body: JSON.stringify(scheduleRequest(date, profileOverrides))
+    }))
   } catch (error) {
-    console.warn('API unavailable, falling back to mock data:', error)
+    console.warn('Schedule API unavailable, falling back to mock data:', error)
+    return mockScheduleResponse
+  }
+}
+
+export async function runScenario(payload: ScenarioRequest, baseline: ScheduleResponse = mockScheduleResponse): Promise<ScheduleResponse> {
+  if (!API_BASE_URL) {
+    return getScenarioModifiedResponse(
+      payload.round_trip_efficiency,
+      payload.battery_duration_hours,
+      payload.max_cycles_per_day,
+      payload.risk_appetite,
+      payload.temperature_policy,
+      payload.degradation_cost_eur_per_cycle
+    )
+  }
+
+  try {
+    const scenario = await fetchJson<BackendScenarioResponse>('/scenario', {
+      method: 'POST',
+      body: JSON.stringify(scenarioRequest(payload))
+    })
+    return mergeScenarioIntoSchedule(scenario, baseline)
+  } catch (error) {
+    console.warn('Scenario API unavailable, falling back to mock data:', error)
     return getScenarioModifiedResponse(
       payload.round_trip_efficiency,
       payload.battery_duration_hours,
@@ -103,56 +313,27 @@ export async function runScenario(payload: ScenarioRequest): Promise<ScheduleRes
   }
 }
 
-// Run backtest
 export async function runBacktest(payload: BacktestRequest): Promise<BacktestResponse> {
-  if (!API_BASE_URL) {
-    console.log('Using mock backtest data')
-    return mockBacktestResult
-  }
-  
+  if (!API_BASE_URL) return mockBacktestResult
+
   try {
-    const response = await fetch(`${API_BASE_URL}/backtest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`)
-    }
-    
-    return await response.json()
+    return mapBacktest(
+      await fetchJson<BackendBacktestResponse>('/backtest', {
+        method: 'POST',
+        body: JSON.stringify(backtestRequest(payload))
+      }),
+      payload.date
+    )
   } catch (error) {
-    console.warn('API unavailable, falling back to mock data:', error)
+    console.warn('Backtest API unavailable, falling back to mock data:', error)
     return mockBacktestResult
   }
 }
 
-// Get alerts
-export async function getAlerts(): Promise<import('@/types/api').Alert[]> {
-  if (!API_BASE_URL) {
-    console.log('Using mock alerts data')
-    return mockAlerts
-  }
-  
-  try {
-    const response = await fetch(`${API_BASE_URL}/alerts`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    })
-    
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`)
-    }
-    
-    return await response.json()
-  } catch (error) {
-    console.warn('API unavailable, falling back to mock data:', error)
-    return mockAlerts
-  }
+export async function getAlerts(): Promise<Alert[]> {
+  return API_BASE_URL ? mockAlerts : mockAlerts
 }
 
-// Check if using mock data
 export function isUsingMockData(): boolean {
   return !API_BASE_URL
 }
