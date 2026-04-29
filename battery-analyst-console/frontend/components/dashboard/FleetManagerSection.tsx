@@ -15,6 +15,7 @@ interface FleetManagerSectionProps {
   onToggleSelected: (id: string) => void
   onApplyAction: (action: BatteryAction) => void
   onAssetActionChange: (id: string, action: BatteryAction) => void
+  onOpenAssetDetail?: (assetId: string) => void
 }
 
 export function FleetManagerSection({
@@ -25,13 +26,14 @@ export function FleetManagerSection({
   onClearSelection,
   onToggleSelected,
   onApplyAction,
-  onAssetActionChange
+  onAssetActionChange,
+  onOpenAssetDetail
 }: FleetManagerSectionProps) {
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-xl font-semibold text-text-primary">Fleet Manager</h2>
-        <p className="mt-1 text-sm text-text-secondary">Review the forecast-driven fleet action and apply manual overrides when needed.</p>
+        <h2 className="text-xl font-semibold text-text-primary">Battery Assets</h2>
+        <p className="mt-1 text-sm text-text-secondary">Asset-level status, controls, and operating decisions.</p>
       </div>
       <FleetSummaryCards summary={summary} />
       <FleetBulkActions
@@ -41,7 +43,13 @@ export function FleetManagerSection({
         onClearSelection={onClearSelection}
         onApplyAction={onApplyAction}
       />
-      <BatteryAssetTable assets={assets} selectedIds={selectedIds} onToggleSelected={onToggleSelected} onActionChange={onAssetActionChange} />
+      <BatteryAssetTable
+        assets={assets}
+        selectedIds={selectedIds}
+        onToggleSelected={onToggleSelected}
+        onActionChange={onAssetActionChange}
+        onOpenAssetDetail={onOpenAssetDetail}
+      />
     </section>
   )
 }
