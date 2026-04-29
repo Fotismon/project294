@@ -258,7 +258,7 @@ function scenarioRequest(payload: ScenarioRequest): BackendScenarioRequest {
 function backtestRequest(payload: BacktestRequest): BackendBacktestRequest {
   return {
     date: payload.date,
-    profile_name: profileName(payload.profile_name || payload.battery_profile),
+    profile_name: payload.profile_name ?? payload.battery_profile ?? 'balanced',
     lookback_days: payload.lookback_days ?? 7,
     forecast_method: payload.forecast_method ?? 'lookback_average',
     market_volatility: payload.market_volatility ?? 'medium',
@@ -267,26 +267,26 @@ function backtestRequest(payload: BacktestRequest): BackendBacktestRequest {
   }
 }
 
-function midpoint(values: number[] | undefined): number {
-  if (!values?.length) return 0
-  if (values.length === 1) return values[0]
-  return (values[0] + values[1]) / 2
-}
-
-function recommendationQuality(response: BackendBacktestResponse): BacktestResponse['recommendation_quality'] {
-  const realizedValue = response.economic_result?.realized_value_eur ?? 0
-  const valueError = response.economic_result?.value_error_eur ?? 0
-  const decision = asDecision(response.decision)
-
-  if ((decision === 'execute' || decision === 'execute_with_caution') && realizedValue > 0 && valueError >= 0) return 'excellent'
-  if ((decision === 'execute' || decision === 'execute_with_caution') && realizedValue > 0) return 'good'
+function deriveBacktestQuality(
+  decision: string,
+  realizedValue: number,
+  valueError: number
+): 'excellent' | 'good' | 'fair' | 'poor' {
   if (decision === 'hold') return 'fair'
-  return 'fair'
+  if (realizedValue > 0 && Math.abs(valueError) < 500) return 'excellent'
+  if (realizedValue > 0) return 'good'
+  if (realizedValue === 0) return 'fair'
+  return 'poor'
 }
 
 function mapBacktest(response: BackendBacktestResponse): BacktestResponse {
-  const expectedValue = midpoint(response.economic_result?.forecast_expected_value_range_eur)
-  const realizedValue = response.economic_result?.realized_value_eur ?? 0
+  const economic = response.economic_result
+  const forecastRange = economic?.forecast_expected_value_range_eur ?? [0, 0]
+  const expectedMidpoint = forecastRange.length >= 2
+    ? Math.round((forecastRange[0] + forecastRange[1]) / 2)
+    : 0
+  const realized = economic?.realized_value_eur ?? 0
+  const valueError = economic?.value_error_eur ?? 0
 
   return {
     date: response.date,
@@ -300,10 +300,10 @@ function mapBacktest(response: BackendBacktestResponse): BacktestResponse {
     schedule_response: response.schedule_response ? mapSchedule(response.schedule_response) : null,
     explanation: response.explanation ?? [],
     warnings: response.warnings ?? [],
-    expected_value_eur: Math.round(expectedValue),
-    realized_value_eur: Math.round(realizedValue),
-    actual_spread: response.economic_result?.realized_spread_after_efficiency ?? 0,
-    recommendation_quality: recommendationQuality(response),
+    expected_value_eur: expectedMidpoint,
+    realized_value_eur: Math.round(realized),
+    actual_spread: economic?.realized_spread_after_efficiency ?? 0,
+    recommendation_quality: deriveBacktestQuality(response.decision, realized, valueError),
     forecast_points: mockBacktestResult.forecast_points
   }
 }
@@ -376,7 +376,10 @@ export async function runBacktest(payload: BacktestRequest): Promise<BacktestRes
     )
   } catch (error) {
     console.warn('Backtest API unavailable, falling back to mock data:', error)
-    return mockBacktestResult
+    return {
+      ...mockBacktestResult,
+      warnings: ['Backtest data unavailable. Showing mock backtest result.', ...mockBacktestResult.warnings]
+    }
   }
 }
 

@@ -195,7 +195,7 @@ export interface BacktestRequest {
   data_quality_level?: DataQualityLevel | string
   minimum_margin_eur_per_mwh?: number
 
-  // Legacy UI-only field kept temporarily until frontend/lib/api.ts is updated.
+  // Legacy UI-only field kept temporarily for older callers.
   battery_profile?: RiskAppetite
 }
 

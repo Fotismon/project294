@@ -227,10 +227,18 @@ export default function Home() {
     setIsBacktestRunning(true)
     setError(null)
     try {
-      const result = await runBacktest({ date: backtestDate, profile_name: backtestProfile, battery_profile: backtestProfile })
+      const result = await runBacktest({
+        date: backtestDate,
+        profile_name: backtestProfile,
+        lookback_days: 7,
+        forecast_method: 'lookback_average',
+        market_volatility: 'medium',
+        data_quality_level: 'medium',
+        minimum_margin_eur_per_mwh: 2
+      })
       setBacktestResult(result)
     } catch {
-      setError('Backtest API failed. Showing mock backtest result.')
+      setError('Backtest data unavailable. Showing mock backtest result.')
     } finally {
       setIsBacktestRunning(false)
     }

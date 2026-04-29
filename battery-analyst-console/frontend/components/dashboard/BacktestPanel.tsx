@@ -20,18 +20,29 @@ function formatDecision(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
+function formatCurrency(value: number): string {
+  return `EUR ${Math.round(value)}`
+}
+
+function formatPrice(value: number): string {
+  return `${value.toFixed(1)} EUR/MWh`
+}
+
 export function BacktestPanel({ date, onDateChange, profile, onProfileChange, onRunBacktest, isRunning, result, assets = [] }: BacktestPanelProps) {
   const assetDistribution = {
     charge: assets.filter((asset) => asset.auto_action === 'charge').length,
     discharge: assets.filter((asset) => asset.auto_action === 'discharge').length,
     idle: assets.filter((asset) => asset.auto_action === 'idle').length
   }
-  const expectedValue = result?.expected_value_eur ?? 0
-  const realizedValue = result?.realized_value_eur ?? 0
-  const actualSpread = result?.actual_spread ?? 0
+  const economic = result?.economic_result ?? null
+  const expectedRange = economic?.forecast_expected_value_range_eur ?? null
+  const expectedValue = result?.expected_value_eur ?? (expectedRange && expectedRange.length >= 2 ? Math.round((expectedRange[0] + expectedRange[1]) / 2) : 0)
+  const realizedValue = result?.realized_value_eur ?? Math.round(economic?.realized_value_eur ?? 0)
+  const actualSpread = result?.actual_spread ?? economic?.realized_spread_after_efficiency ?? 0
   const recommendationQuality = result?.recommendation_quality ?? 'fair'
   const explanation = Array.isArray(result?.explanation) ? result.explanation.join(' ') : ''
   const forecastPoints = result?.forecast_points ?? []
+  const warnings = result?.warnings ?? []
 
   return (
     <div className="space-y-6">
@@ -73,11 +84,22 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
       {result ? (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCard label="Historical Decision" value={formatDecision(result.decision)} variant={result.decision === 'execute' ? 'success' : 'warning'} size="sm" />
-            <MetricCard label="Expected Value" value={`€${expectedValue}`} size="sm" />
-            <MetricCard label="Realized Value" value={`€${realizedValue}`} variant={realizedValue >= expectedValue * 0.8 ? 'success' : 'warning'} size="sm" />
-            <MetricCard label="Actual Spread" value={actualSpread.toFixed(1)} unit="€/MWh" size="sm" />
+            <MetricCard label="Historical Decision" value={formatDecision(result.decision)} variant={result.decision === 'execute' || result.decision === 'execute_with_caution' ? 'success' : 'warning'} size="sm" />
+            <MetricCard label="Confidence" value={formatDecision(result.confidence)} size="sm" />
+            <MetricCard label="Realized Value" value={formatCurrency(realizedValue)} variant={realizedValue >= expectedValue * 0.8 ? 'success' : 'warning'} size="sm" />
+            <MetricCard label="Actual Spread" value={actualSpread.toFixed(1)} unit="EUR/MWh" size="sm" />
           </div>
+
+          {warnings.length > 0 && (
+            <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
+              <h3 className="mb-2 text-xs uppercase tracking-wider text-warning">Backtest Warnings</h3>
+              <ul className="space-y-1 text-sm text-text-primary">
+                {warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
             <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Backtest Summary</h3>
@@ -86,7 +108,7 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
               <SummaryItem label="Charge" value={assetDistribution.charge || 4} />
               <SummaryItem label="Discharge" value={assetDistribution.discharge || 2} />
               <SummaryItem label="Idle" value={assetDistribution.idle || 2} />
-              <SummaryItem label="Fleet Realized Value" value={`€${realizedValue}`} />
+              <SummaryItem label="Fleet Realized Value" value={formatCurrency(realizedValue)} />
             </div>
           </div>
 
@@ -118,7 +140,7 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
                         <td className="py-2 pr-3 text-text-primary">{asset.auto_action}</td>
                         <td className="py-2 pr-3 text-text-primary">{Math.round(asset.soc * 100)}%</td>
                         <td className="py-2 pr-3 text-text-primary">{asset.stress_level}</td>
-                        <td className="py-2 pr-3 text-text-primary">€{asset.expected_value_eur[0]}-€{asset.expected_value_eur[1]}</td>
+                        <td className="py-2 pr-3 text-text-primary">EUR {asset.expected_value_eur[0]}-EUR {asset.expected_value_eur[1]}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -134,22 +156,50 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
                 <div>
                   <p className="text-xs text-text-muted">Charge Window</p>
                   <p className="text-text-primary">{result.charge_window ? `${result.charge_window.start}-${result.charge_window.end}` : 'No trade'}</p>
-                  <p className="text-xs text-text-muted">@ {result.charge_window?.realized_avg_price ?? 0} €/MWh realized</p>
+                  {result.charge_window ? (
+                    <div className="mt-1 space-y-1 text-xs text-text-muted">
+                      <p>Forecast {formatPrice(result.charge_window.forecast_avg_price)}</p>
+                      <p>Realized {formatPrice(result.charge_window.realized_avg_price)}</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-text-muted">Decision did not include a charge window.</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-text-muted">Discharge Window</p>
                   <p className="text-text-primary">{result.discharge_window ? `${result.discharge_window.start}-${result.discharge_window.end}` : 'No trade'}</p>
-                  <p className="text-xs text-text-muted">@ {result.discharge_window?.realized_avg_price ?? 0} €/MWh realized</p>
+                  {result.discharge_window ? (
+                    <div className="mt-1 space-y-1 text-xs text-text-muted">
+                      <p>Forecast {formatPrice(result.discharge_window.forecast_avg_price)}</p>
+                      <p>Realized {formatPrice(result.discharge_window.realized_avg_price)}</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-text-muted">Decision did not include a discharge window.</p>
+                  )}
                 </div>
               </div>
             </div>
             <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-              <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Recommendation Quality</h3>
-              <span className="mb-3 inline-block rounded bg-success/10 px-3 py-1 text-sm font-medium text-success">
-                {formatDecision(recommendationQuality)}
-              </span>
-              <p className="text-sm leading-relaxed text-text-secondary">{explanation}</p>
+              <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Economic Result</h3>
+              {economic ? (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <SummaryItem label="Forecast Spread" value={formatPrice(economic.forecast_spread_after_efficiency)} />
+                  <SummaryItem label="Realized Spread" value={formatPrice(economic.realized_spread_after_efficiency)} />
+                  <SummaryItem label="Forecast Value" value={expectedRange && expectedRange.length >= 2 ? `EUR ${expectedRange[0]}-EUR ${expectedRange[1]}` : formatCurrency(expectedValue)} />
+                  <SummaryItem label="Value Error" value={formatCurrency(economic.value_error_eur)} />
+                </div>
+              ) : (
+                <p className="text-sm text-text-secondary">No realized trade value was calculated.</p>
+              )}
             </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
+            <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Recommendation Quality</h3>
+            <span className="mb-3 inline-block rounded bg-success/10 px-3 py-1 text-sm font-medium text-success">
+              {formatDecision(recommendationQuality)}
+            </span>
+            <p className="text-sm leading-relaxed text-text-secondary">{explanation}</p>
           </div>
         </div>
       ) : (
