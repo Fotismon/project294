@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(ipynb|py|pkl|joblib|h5\\)$\")",
+      "Bash(pip show *)",
+      "Bash(pip install *)",
+      "Bash(python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload)",
+      "Bash(NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev)",
+      "Bash(curl -s \"http://localhost:8000/forecast?date=2026-04-30\")",
+      "Bash(python -c ' *)",
+      "Bash(taskkill /F /IM python.exe /T)",
+      "Bash(python -m uvicorn app.main:app --host 0.0.0.0 --port 8000)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill /F /PID 15952)",
+      "PowerShell(Stop-Process *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(netstat *)",
+      "Bash(python -m uvicorn app.main:app --host 0.0.0.0 --port 8001)",
+      "Bash(NEXT_PUBLIC_API_BASE_URL=http://localhost:8001 npm run dev)",
+      "Bash(curl -s http://localhost:8001/health)",
+      "Bash(curl -s \"http://localhost:8001/forecast?date=2026-04-30\")",
+      "Bash(curl -s 'http://localhost:8001/forecast?date=2026-04-30')",
+      "Bash(curl -s -X POST http://localhost:8001/schedule -H \"Content-Type: application/json\" -d \"{\\\\\"date\\\\\":\\\\\"2026-04-30\\\\\",\\\\\"profile_name\\\\\":\\\\\"balanced\\\\\",\\\\\"prices\\\\\":$\\(curl -s 'http://localhost:8001/forecast?date=2026-04-30')"
+    ]
+  }
+}

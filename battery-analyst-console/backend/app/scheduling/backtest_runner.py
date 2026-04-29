@@ -1,5 +1,11 @@
 from app.battery.profiles import get_battery_profile
-from app.data.market_prices import get_price_history_before_date, get_prices_for_date
+from app.data.market_prices import get_prices_for_date
+from app.forecasting.forecast_data import (
+    build_inference_features,
+    fetch_weather_forecast,
+    load_feature_store,
+)
+from app.forecasting.forecast_engine import run_forecast
 from app.schemas.backtest import (
     BacktestEconomicResult,
     BacktestRealizedWindow,
@@ -11,34 +17,28 @@ from app.scheduling.schedule_runner import run_schedule_analysis
 from app.scheduling.soc import time_to_interval_index
 
 
-FALLBACK_FORECAST_WARNING = (
-    "No prior historical data was available; used same-day actual prices as fallback "
-    "forecast for MVP testing."
-)
-
-
 def generate_backtest_forecast(
     date: str,
-    lookback_days: int = 7,
-    forecast_method: str = "lookback_average",
-) -> tuple[list[float], list[str]]:
-    """Generate a lightweight backtest forecast from prior local price history."""
+    **_kwargs,
+) -> tuple[list[float], float, list[str]]:
+    """Generate a D+1 forecast using the trained LightGBM quantile models."""
+    store = load_feature_store()
+    try:
+        weather = fetch_weather_forecast(date)
+    except Exception:
+        import pandas as pd
+        weather = pd.DataFrame()
 
-    if forecast_method != "lookback_average":
-        raise ValueError(f"Unknown forecast_method '{forecast_method}'.")
+    X = build_inference_features(date, store, weather)
+    forecast_response = run_forecast(date, X)
 
-    histories = get_price_history_before_date(date, lookback_days)
-    if histories:
-        forecast_prices = [
-            round(sum(day_prices[index] for day_prices in histories) / len(histories), 2)
-            for index in range(96)
-        ]
-        return forecast_prices, [
-            f"Generated lookback-average forecast from {len(histories)} prior day(s)."
-        ]
-
-    actual_prices, _temperatures = get_prices_for_date(date)
-    return actual_prices, [FALLBACK_FORECAST_WARNING]
+    prices = [pt.predicted_price for pt in forecast_response.points]
+    avg_band_width = forecast_response.avg_band_width_eur
+    return (
+        prices,
+        avg_band_width,
+        [f"Generated LightGBM quantile forecast (avg P05-P95 band: {avg_band_width:.1f} EUR/MWh)."],
+    )
 
 
 def average_prices_for_window(prices: list[float], start: str, end: str) -> float:
@@ -56,23 +56,20 @@ def average_prices_for_window(prices: list[float], start: str, end: str) -> floa
 
 
 def run_lightweight_backtest(request: BacktestRequest) -> BacktestResponse:
-    """Run a lightweight historical backtest for a single date."""
+    """Run a historical backtest for a single date using the LightGBM forecast model."""
 
     actual_prices, actual_temperatures = get_prices_for_date(request.date)
-    forecast_prices, forecast_explanation = generate_backtest_forecast(
+    forecast_prices, avg_band_width, forecast_explanation = generate_backtest_forecast(
         date=request.date,
-        lookback_days=request.lookback_days,
-        forecast_method=request.forecast_method,
     )
-    warnings = [
-        line for line in forecast_explanation if line == FALLBACK_FORECAST_WARNING
-    ]
+    warnings: list[str] = []
 
     schedule_request = ScheduleRequest(
         date=request.date,
         profile_name=request.profile_name,
         prices=forecast_prices,
         temperatures=actual_temperatures,
+        forecast_uncertainty_width=avg_band_width,
         market_volatility=request.market_volatility,
         data_quality_level=request.data_quality_level,
         minimum_margin_eur_per_mwh=request.minimum_margin_eur_per_mwh,

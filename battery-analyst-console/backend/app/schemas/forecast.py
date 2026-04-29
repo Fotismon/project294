@@ -14,7 +14,12 @@ class ForecastResponse(BaseModel):
     market: str = Field(..., description="Market represented by the forecast.")
     country: str = Field(..., description="Country or market zone code.")
     unit: str = Field(..., description="Price unit for forecast values.")
-    points: list[ForecastPoint] = Field(..., description="Hourly forecast points.")
+    points: list[ForecastPoint] = Field(..., description="Forecast points at 15-min resolution.")
+    avg_band_width_eur: float = Field(
+        default=25.0,
+        description="Average P05–P95 band width across all slots (EUR/MWh). "
+        "Pass this as forecast_uncertainty_width in /schedule requests.",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={

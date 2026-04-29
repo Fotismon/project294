@@ -296,6 +296,7 @@ export interface BackendForecastResponse {
   country: string
   unit: string
   points: BackendForecastPoint[]
+  avg_band_width_eur: number
 }
 
 export interface BackendSoCFeasibility {
