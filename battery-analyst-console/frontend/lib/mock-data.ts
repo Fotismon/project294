@@ -83,6 +83,8 @@ export const mockScheduleResponse: ScheduleResponse = {
   expected_value_range_eur: [120, 180],
   soc_feasibility: {
     feasible: true,
+    min_soc: 0.1,
+    max_soc: 0.9,
     start_soc: 0.5,
     end_soc: 0.49,
     min_soc_reached: 0.28,
@@ -344,22 +346,41 @@ export const mockAlerts: Alert[] = [
 
 export const mockBacktestResult: BacktestResponse = {
   date: '2026-04-25',
+  profile_name: 'balanced',
+  forecast_method: 'lookback_average',
   decision: 'execute',
+  confidence: 'medium_high',
   charge_window: {
     start: '11:00',
     end: '13:00',
-    avg_price: 35.2
+    forecast_avg_price: 35.2,
+    realized_avg_price: 37.1
   },
   discharge_window: {
     start: '19:00',
     end: '21:00',
-    avg_price: 112.4
+    forecast_avg_price: 112.4,
+    realized_avg_price: 109.6
   },
+  economic_result: {
+    forecast_spread_after_efficiency: 70.2,
+    realized_spread_after_efficiency: 67.4,
+    forecast_expected_value_range_eur: [120, 180],
+    realized_value_eur: 142,
+    value_error_eur: -8
+  },
+  schedule_response: mockScheduleResponse,
+  explanation: [
+    'Recommendation was sound.',
+    'Actual spread was close to forecast.',
+    'Temperature constraints were respected.',
+    'Minor deviation came from evening peak volatility.'
+  ],
+  warnings: [],
   expected_value_eur: 150,
   realized_value_eur: 142,
   actual_spread: 70.2,
   recommendation_quality: 'good',
-  explanation: 'Recommendation was sound. Actual spread was close to forecast. Temperature constraints were respected. Minor deviation came from evening peak volatility.',
   forecast_points: mockBacktestForecastData
 }
 

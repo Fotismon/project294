@@ -9,10 +9,8 @@ import {
   BackendScheduleRequest,
   BackendScheduleResponse,
   BackendScenarioRequest,
-  BackendScenarioResponse,
   BatteryAction,
   BatteryAsset,
-  BatteryProfile,
   BacktestRequest,
   BacktestResponse,
   Confidence,
@@ -40,18 +38,6 @@ import {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ''
 
-const DEFAULT_BATTERY: BatteryProfile = {
-  battery_id: 'battery-001',
-  capacity_kwh: 1000,
-  max_charge_kw: 500,
-  max_discharge_kw: 500,
-  min_soc: 0.1,
-  max_soc: 0.9,
-  current_soc: 0.5,
-  round_trip_efficiency: 0.88,
-  max_cycles_per_day: 1
-}
-
 function effectiveFleetAction(asset: BatteryAsset): Exclude<BatteryAction, 'auto'> {
   return asset.selected_action === 'auto' ? asset.auto_action : asset.selected_action
 }
@@ -72,10 +58,6 @@ function mapFleetSummary(assets: BatteryAsset[]): FleetSummary {
     assets_idle: actions.filter((action) => action === 'idle').length,
     expected_value_eur: assets.reduce<[number, number]>((range, asset) => [range[0] + asset.expected_value_eur[0], range[1] + asset.expected_value_eur[1]], [0, 0])
   }
-}
-
-function buildBatteryProfile(overrides: Partial<BatteryProfile> = {}): BatteryProfile {
-  return { ...DEFAULT_BATTERY, ...overrides }
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -120,6 +102,60 @@ function rangeFrom(values: number[] | undefined, fallback: [number, number]): [n
   if (!values?.length) return fallback
   if (values.length === 1) return [Math.round(values[0]), Math.round(values[0])]
   return [Math.round(values[0]), Math.round(values[1])]
+}
+
+function buildSamplePrices(): number[] {
+  return Array.from({ length: 96 }, (_, index) => {
+    if (index >= 44 && index <= 51) return 35
+    if (index >= 80 && index <= 87) return 120
+    return 80
+  })
+}
+
+function buildSampleTemperatures(): number[] {
+  return Array.from({ length: 96 }, (_, index) => {
+    if (index >= 80 && index <= 87) return 31
+    return 25
+  })
+}
+
+function getDefaultSchedulerInput() {
+  return {
+    prices: buildSamplePrices(),
+    temperatures: buildSampleTemperatures(),
+    forecast_confidence: 'medium_high' as const,
+    market_volatility: 'medium' as const,
+    forecast_uncertainty_width: 25,
+    data_quality_level: 'medium' as const,
+    minimum_margin_eur_per_mwh: 2
+  }
+}
+
+function normalizeEfficiency(value: number | null | undefined): number | null {
+  if (value == null) return null
+  return value > 1 ? value / 100 : value
+}
+
+function normalizeTemperaturePolicy(value: string | undefined): 'relaxed' | 'normal' | 'strict' {
+  if (value === 'relaxed' || value === 'normal' || value === 'strict') return value
+  if (value === 'permissive') return 'relaxed'
+  if (value === 'conservative') return 'strict'
+  return 'normal'
+}
+
+function normalizeMockTemperaturePolicy(value: string | undefined): 'permissive' | 'balanced' | 'conservative' {
+  if (value === 'relaxed' || value === 'permissive') return 'permissive'
+  if (value === 'strict' || value === 'conservative') return 'conservative'
+  return 'balanced'
+}
+
+function scenarioEfficiencyPercent(value: number | null | undefined): number {
+  const normalized = normalizeEfficiency(value)
+  return normalized == null ? 90 : normalized * 100
+}
+
+function profileName(value: RiskAppetite | string | undefined): RiskAppetite | string {
+  return value || 'balanced'
 }
 
 function hourOf(timestamp: string): number {
@@ -180,6 +216,8 @@ function mapSchedule(response: BackendScheduleResponse): ScheduleResponse {
     expected_value_range_eur: rangeFrom(response.expected_value_range_eur, mockScheduleResponse.expected_value_range_eur),
     soc_feasibility: {
       feasible: response.soc_feasibility.feasible,
+      min_soc: response.soc_feasibility.min_soc,
+      max_soc: response.soc_feasibility.max_soc,
       start_soc: response.soc_feasibility.start_soc,
       end_soc: response.soc_feasibility.end_soc,
       min_soc_reached: response.soc_feasibility.min_soc,
@@ -207,78 +245,88 @@ function mapSchedule(response: BackendScheduleResponse): ScheduleResponse {
   }
 }
 
-function scheduleRequest(date: string, overrides: Partial<BatteryProfile> = {}): BackendScheduleRequest {
+function scheduleRequest(date: string, batteryProfile?: RiskAppetite | string): BackendScheduleRequest {
+  const defaults = getDefaultSchedulerInput()
+
   return {
     date,
-    battery: buildBatteryProfile(overrides),
-    strategy: 'spread_capture',
-    market: 'day_ahead',
-    country: 'GR'
+    profile_name: profileName(batteryProfile),
+    ...defaults
   }
 }
 
 function scenarioRequest(payload: ScenarioRequest): BackendScenarioRequest {
+  const defaults = getDefaultSchedulerInput()
+  const profile = profileName(payload.profile_name || payload.battery_profile || payload.risk_appetite)
+
   return {
     date: payload.date,
-    battery: buildBatteryProfile({
-      round_trip_efficiency: payload.round_trip_efficiency / 100,
-      max_cycles_per_day: payload.max_cycles_per_day
-    }),
-    price_multiplier: payload.risk_appetite === 'aggressive' ? 1.12 : payload.risk_appetite === 'conservative' ? 0.92 : 1,
-    efficiency_override: payload.round_trip_efficiency / 100,
-    notes: `duration=${payload.battery_duration_hours}h; degradation=${payload.degradation_cost_eur_per_cycle}; temperature=${payload.temperature_policy}`
-  }
-}
-
-function mergeScenarioIntoSchedule(response: BackendScenarioResponse, baseline: ScheduleResponse): ScheduleResponse {
-  return {
-    ...baseline,
-    date: response.date,
-    decision: asDecision(response.decision),
-    expected_value_range_eur: rangeFrom(response.expected_value_range_eur, baseline.expected_value_range_eur),
-    alerts: [
-      ...baseline.alerts,
-      {
-        severity: 'info',
-        title: response.scenario_name.replace(/_/g, ' '),
-        message: response.key_changes.join(' '),
-        recommended_action: 'Compare this scenario against the base schedule before dispatch.'
-      }
-    ],
-    explanation: response.explanation.length > 0 ? response.explanation : baseline.explanation
+    profile_name: profile,
+    prices: payload.prices?.length ? payload.prices : defaults.prices,
+    temperatures: payload.temperatures?.length ? payload.temperatures : defaults.temperatures,
+    round_trip_efficiency: normalizeEfficiency(payload.round_trip_efficiency),
+    duration_hours: payload.duration_hours ?? payload.battery_duration_hours ?? null,
+    max_cycles_per_day: payload.max_cycles_per_day ?? null,
+    degradation_cost_eur_per_mwh: payload.degradation_cost_eur_per_mwh ?? payload.degradation_cost_eur_per_cycle ?? null,
+    temperature_policy: normalizeTemperaturePolicy(payload.temperature_policy),
+    risk_appetite: payload.risk_appetite,
+    forecast_confidence: payload.forecast_confidence ?? defaults.forecast_confidence,
+    market_volatility: payload.market_volatility ?? defaults.market_volatility,
+    forecast_uncertainty_width: payload.forecast_uncertainty_width ?? defaults.forecast_uncertainty_width,
+    data_quality_level: payload.data_quality_level ?? defaults.data_quality_level,
+    minimum_margin_eur_per_mwh: payload.minimum_margin_eur_per_mwh ?? defaults.minimum_margin_eur_per_mwh
   }
 }
 
 function backtestRequest(payload: BacktestRequest): BackendBacktestRequest {
-  const endDate = payload.date
-  const start = new Date(`${payload.date}T12:00:00`)
-  start.setDate(start.getDate() - 29)
-
   return {
-    start_date: start.toISOString().slice(0, 10),
-    end_date: endDate,
-    battery: buildBatteryProfile({
-      max_cycles_per_day: payload.battery_profile === 'aggressive' ? 2 : 1,
-      round_trip_efficiency: payload.battery_profile === 'conservative' ? 0.9 : 0.88
-    }),
-    strategy: 'spread_capture'
+    date: payload.date,
+    profile_name: profileName(payload.profile_name || payload.battery_profile),
+    lookback_days: payload.lookback_days ?? 7,
+    forecast_method: payload.forecast_method ?? 'lookback_average',
+    market_volatility: payload.market_volatility ?? 'medium',
+    data_quality_level: payload.data_quality_level ?? 'medium',
+    minimum_margin_eur_per_mwh: payload.minimum_margin_eur_per_mwh ?? 2
   }
 }
 
-function mapBacktest(response: BackendBacktestResponse, requestedDate: string): BacktestResponse {
-  const total = Math.round(response.summary.total_expected_value_eur)
-  const realized = Math.round(response.summary.average_daily_value_eur * response.summary.profitable_days)
+function midpoint(values: number[] | undefined): number {
+  if (!values?.length) return 0
+  if (values.length === 1) return values[0]
+  return (values[0] + values[1]) / 2
+}
+
+function recommendationQuality(response: BackendBacktestResponse): BacktestResponse['recommendation_quality'] {
+  const realizedValue = response.economic_result?.realized_value_eur ?? 0
+  const valueError = response.economic_result?.value_error_eur ?? 0
+  const decision = asDecision(response.decision)
+
+  if ((decision === 'execute' || decision === 'execute_with_caution') && realizedValue > 0 && valueError >= 0) return 'excellent'
+  if ((decision === 'execute' || decision === 'execute_with_caution') && realizedValue > 0) return 'good'
+  if (decision === 'hold') return 'fair'
+  return 'fair'
+}
+
+function mapBacktest(response: BackendBacktestResponse): BacktestResponse {
+  const expectedValue = midpoint(response.economic_result?.forecast_expected_value_range_eur)
+  const realizedValue = response.economic_result?.realized_value_eur ?? 0
 
   return {
-    date: requestedDate,
-    decision: response.summary.profitable_days > response.summary.skipped_days ? 'execute' : 'watch',
-    charge_window: mockBacktestResult.charge_window,
-    discharge_window: mockBacktestResult.discharge_window,
-    expected_value_eur: total,
-    realized_value_eur: realized,
-    actual_spread: Math.round(response.summary.average_daily_value_eur * 10) / 10,
-    recommendation_quality: response.summary.profitable_days / Math.max(response.summary.total_days, 1) > 0.65 ? 'good' : 'fair',
-    explanation: response.notes.join(' '),
+    date: response.date,
+    profile_name: response.profile_name,
+    forecast_method: response.forecast_method,
+    decision: asDecision(response.decision),
+    confidence: asConfidence(response.confidence),
+    charge_window: response.charge_window,
+    discharge_window: response.discharge_window,
+    economic_result: response.economic_result,
+    schedule_response: response.schedule_response ? mapSchedule(response.schedule_response) : null,
+    explanation: response.explanation ?? [],
+    warnings: response.warnings ?? [],
+    expected_value_eur: Math.round(expectedValue),
+    realized_value_eur: Math.round(realizedValue),
+    actual_spread: response.economic_result?.realized_spread_after_efficiency ?? 0,
+    recommendation_quality: recommendationQuality(response),
     forecast_points: mockBacktestResult.forecast_points
   }
 }
@@ -298,14 +346,9 @@ export async function getSchedule(date: string, batteryProfile?: RiskAppetite | 
   if (!API_BASE_URL) return mockScheduleResponse
 
   try {
-    const profileOverrides: Partial<BatteryProfile> = {
-      max_cycles_per_day: batteryProfile === 'aggressive' ? 2 : 1,
-      round_trip_efficiency: batteryProfile === 'conservative' ? 0.9 : 0.88
-    }
-
     return mapSchedule(await fetchJson<BackendScheduleResponse>('/schedule', {
       method: 'POST',
-      body: JSON.stringify(scheduleRequest(date, profileOverrides))
+      body: JSON.stringify(scheduleRequest(date, batteryProfile))
     }))
   } catch (error) {
     console.warn('Schedule API unavailable, falling back to mock data:', error)
@@ -316,30 +359,30 @@ export async function getSchedule(date: string, batteryProfile?: RiskAppetite | 
 export async function runScenario(payload: ScenarioRequest, baseline: ScheduleResponse = mockScheduleResponse): Promise<ScheduleResponse> {
   if (!API_BASE_URL) {
     return getScenarioModifiedResponse(
-      payload.round_trip_efficiency,
-      payload.battery_duration_hours,
-      payload.max_cycles_per_day,
+      scenarioEfficiencyPercent(payload.round_trip_efficiency),
+      payload.duration_hours ?? payload.battery_duration_hours ?? 2,
+      payload.max_cycles_per_day ?? 1,
       payload.risk_appetite,
-      payload.temperature_policy,
-      payload.degradation_cost_eur_per_cycle
+      normalizeMockTemperaturePolicy(payload.temperature_policy),
+      payload.degradation_cost_eur_per_mwh ?? payload.degradation_cost_eur_per_cycle ?? 10
     )
   }
 
   try {
-    const scenario = await fetchJson<BackendScenarioResponse>('/scenario', {
+    const scenario = await fetchJson<BackendScheduleResponse>('/scenario', {
       method: 'POST',
       body: JSON.stringify(scenarioRequest(payload))
     })
-    return mergeScenarioIntoSchedule(scenario, baseline)
+    return mapSchedule(scenario)
   } catch (error) {
     console.warn('Scenario API unavailable, falling back to mock data:', error)
     return getScenarioModifiedResponse(
-      payload.round_trip_efficiency,
-      payload.battery_duration_hours,
-      payload.max_cycles_per_day,
+      scenarioEfficiencyPercent(payload.round_trip_efficiency),
+      payload.duration_hours ?? payload.battery_duration_hours ?? 2,
+      payload.max_cycles_per_day ?? 1,
       payload.risk_appetite,
-      payload.temperature_policy,
-      payload.degradation_cost_eur_per_cycle
+      normalizeMockTemperaturePolicy(payload.temperature_policy),
+      payload.degradation_cost_eur_per_mwh ?? payload.degradation_cost_eur_per_cycle ?? 10
     )
   }
 }
@@ -352,8 +395,7 @@ export async function runBacktest(payload: BacktestRequest): Promise<BacktestRes
       await fetchJson<BackendBacktestResponse>('/backtest', {
         method: 'POST',
         body: JSON.stringify(backtestRequest(payload))
-      }),
-      payload.date
+      })
     )
   } catch (error) {
     console.warn('Backtest API unavailable, falling back to mock data:', error)
@@ -362,6 +404,7 @@ export async function runBacktest(payload: BacktestRequest): Promise<BacktestRes
 }
 
 export async function getAlerts(): Promise<Alert[]> {
+  // Dedicated /alerts endpoint does not exist yet; alerts arrive on schedule and scenario responses.
   return API_BASE_URL ? mockAlerts : mockAlerts
 }
 

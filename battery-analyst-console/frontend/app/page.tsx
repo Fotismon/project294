@@ -120,7 +120,7 @@ export default function Home() {
   const [maxCycles, setMaxCycles] = useState(1)
   const [degradationCost, setDegradationCost] = useState(10)
   const [riskAppetite, setRiskAppetite] = useState<RiskAppetite>('balanced')
-  const [temperaturePolicy, setTemperaturePolicy] = useState<TemperaturePolicy>('balanced')
+  const [temperaturePolicy, setTemperaturePolicy] = useState<TemperaturePolicy>('normal')
   const [isScenarioRunning, setIsScenarioRunning] = useState(false)
 
   const [backtestDate, setBacktestDate] = useState('2026-04-25')
@@ -188,6 +188,8 @@ export default function Home() {
       const result = await runScenario(
         {
           date: scheduleData.date,
+          profile_name: riskAppetite,
+          prices: [],
           battery_profile: riskAppetite,
           round_trip_efficiency: roundTripEfficiency,
           battery_duration_hours: batteryDuration,

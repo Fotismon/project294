@@ -87,9 +87,9 @@ export function ScenarioControls({
         </SelectControl>
 
         <SelectControl label="Temperature Policy" value={temperaturePolicy} onChange={(value) => onTemperaturePolicyChange(value as TemperaturePolicy)}>
-          <option value="permissive">Permissive</option>
-          <option value="balanced">Balanced</option>
-          <option value="conservative">Conservative</option>
+          <option value="relaxed">Relaxed</option>
+          <option value="normal">Normal</option>
+          <option value="strict">Strict</option>
         </SelectControl>
       </div>
 
