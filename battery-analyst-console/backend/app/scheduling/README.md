@@ -11,5 +11,6 @@ Task 5.2 adds raw charged/discharged MWh and Equivalent Full Cycles. EFC is calc
 Task 6.1 adds transparent rule-based scoring. It combines spread quality, forecast confidence, temperature risk, battery stress, and uncertainty penalties into a simple explainable MVP score.
 Task 6.2 adds battery stress scoring. It uses EFC, temperature risk, action duration intensity, rapid switching risk, and weak economic spread as simple MVP risk indicators.
 Task 6.3 adds decision confidence scoring. It uses spread strength, forecast uncertainty width, data quality level, temperature risk, and SoC feasibility as an explainable MVP confidence indicator.
+Task 6.4 adds the final recommendation builder. It combines score, stress, confidence, economics, physical constraints, and SoC feasibility into `execute`, `execute_with_caution`, `watch`, or `hold`.
 
-This is not a full simulator or degradation model: it does not model nonlinear battery behavior, aging curves, thermal capacity effects, ramp rates, or execution uncertainty. Later tasks will add final response assembly.
+This is not a full simulator or degradation model: it does not model nonlinear battery behavior, aging curves, thermal capacity effects, ramp rates, or execution uncertainty. API integration will happen later.
