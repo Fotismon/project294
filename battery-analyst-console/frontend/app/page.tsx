@@ -188,9 +188,11 @@ export default function Home() {
       })
       clearApiFallback()
       try {
+        const operatingDate = todayAthens()
+
         const [schedule, forecast] = await Promise.all([
-          getSchedule(mockScheduleResponse.date, 'balanced', optimizerMode),
-          getForecast(mockScheduleResponse.date)
+          getSchedule(operatingDate, 'balanced', optimizerMode),
+          getForecast(operatingDate)
         ])
         if (!mounted) return
         setScheduleData(schedule)
