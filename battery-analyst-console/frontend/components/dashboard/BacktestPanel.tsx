@@ -65,17 +65,23 @@ function humanize(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function hasMissingDataWarning(result: BacktestResponse): boolean {
-  return result.warnings.some((warning) => {
+function hasMissingHistoricalData(result: BacktestResponse | null): boolean {
+  if (!result) return false
+
+  const hasMissingDataWarning = result.warnings.some((warning) => {
     const normalized = warning.toLowerCase()
     return (
-      normalized.includes('market data') ||
-      normalized.includes('csv') ||
       normalized.includes('historical') ||
+      normalized.includes('csv') ||
+      normalized.includes('market_prices') ||
+      normalized.includes('market price data') ||
       normalized.includes('unavailable') ||
-      normalized.includes('mock')
+      normalized.includes('mock') ||
+      normalized.includes('no data')
     )
   })
+
+  return hasMissingDataWarning || (result.economic_result === null && result.warnings.length > 0 && hasMissingDataWarning)
 }
 
 function windowDifference(window: BackendBacktestRealizedWindow): number {
@@ -90,6 +96,43 @@ function valueError(result: BacktestResponse): number {
   return result.economic_result?.value_error_eur ?? 0
 }
 
+function MissingHistoricalDataState() {
+  return (
+    <div className="border border-warning/40 bg-warning/10 p-4">
+      <StatusBadge label="Real backtesting disabled" tone="warning" dot />
+      <EmptyState
+        title="Historical data unavailable"
+        message="Add market_prices.csv to enable real backtesting."
+        className="mt-3 border-warning/30 bg-surface/70 py-6"
+      />
+      <div className="mt-4 space-y-3 text-sm text-text-secondary">
+        <p>
+          The backtest backend needs 96 interval rows for the selected date. The UI is currently showing fallback data.
+        </p>
+        <p>Real backtesting is disabled until historical price data is provided.</p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <MissingDataNote label="Expected columns" value="date, interval_index, price" />
+          <MissingDataNote label="Optional columns" value="timestamp, temperature" />
+          <MissingDataNote label="Example path" value="data/market_prices.csv" />
+        </div>
+        <p className="text-xs text-text-muted">
+          Create battery-analyst-console/data/market_prices.csv with 96 rows per date. Until then, the UI may display
+          mock fallback results for demo continuity.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function MissingDataNote({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-border bg-surface px-3 py-2">
+      <p className="text-xs uppercase tracking-wider text-text-muted">{label}</p>
+      <code className="mt-1 block text-xs text-text-primary">{value}</code>
+    </div>
+  )
+}
+
 export function BacktestPanel({
   date,
   onDateChange,
@@ -100,7 +143,7 @@ export function BacktestPanel({
   result,
   assets = []
 }: BacktestPanelProps) {
-  const missingData = result ? hasMissingDataWarning(result) : false
+  const missingData = hasMissingHistoricalData(result)
   const economic = result?.economic_result ?? null
   const isHold = result?.decision === 'hold'
 
@@ -155,13 +198,7 @@ export function BacktestPanel({
         ) : (
           <div className="space-y-6">
             {missingData && (
-              <div className="border border-warning/40 bg-warning/10 p-4">
-                <StatusBadge label="Historical data unavailable" tone="warning" dot />
-                <p className="mt-3 text-sm leading-relaxed text-text-primary">
-                  Add market_prices.csv with 96 intervals for the selected date to enable real backtesting.
-                </p>
-                <p className="mt-1 text-sm text-text-secondary">The UI is displaying mock fallback data.</p>
-              </div>
+              <MissingHistoricalDataState />
             )}
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
