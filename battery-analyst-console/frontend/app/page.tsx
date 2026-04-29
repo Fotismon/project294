@@ -93,16 +93,19 @@ export default function Home() {
     setIsScenarioRunning(true)
     setError(null)
     try {
-      const result = await runScenario({
-        date: scheduleData.date,
-        battery_profile: riskAppetite,
-        round_trip_efficiency: roundTripEfficiency,
-        battery_duration_hours: batteryDuration,
-        max_cycles_per_day: maxCycles,
-        degradation_cost_eur_per_cycle: degradationCost,
-        risk_appetite: riskAppetite,
-        temperature_policy: temperaturePolicy
-      })
+      const result = await runScenario(
+        {
+          date: scheduleData.date,
+          battery_profile: riskAppetite,
+          round_trip_efficiency: roundTripEfficiency,
+          battery_duration_hours: batteryDuration,
+          max_cycles_per_day: maxCycles,
+          degradation_cost_eur_per_cycle: degradationCost,
+          risk_appetite: riskAppetite,
+          temperature_policy: temperaturePolicy
+        },
+        scheduleData
+      )
       setScheduleData(result)
     } catch {
       setError('Scenario API failed. Local mock scenario is still available.')
