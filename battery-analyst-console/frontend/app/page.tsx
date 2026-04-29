@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { ApiStatusBanner } from '@/components/dashboard/ApiStatusBanner'
 import { AlertCard } from '@/components/dashboard/AlertCard'
 import { BacktestPanel } from '@/components/dashboard/BacktestPanel'
+import { BatteryAssetDetailPanel } from '@/components/dashboard/BatteryAssetDetailPanel'
 import { BatteryStressCard } from '@/components/dashboard/BatteryStressCard'
 import { ConstraintPanel } from '@/components/dashboard/ConstraintPanel'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
@@ -134,6 +135,7 @@ export default function Home() {
   const [alerts, setAlerts] = useState<Alert[]>(mockAlerts)
   const [fleetAssets, setFleetAssets] = useState<BatteryAsset[]>(mockFleetAssets)
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [apiStatus, setApiStatus] = useState<ApiStatus>({
@@ -156,6 +158,10 @@ export default function Home() {
 
   const fleetSummary = useMemo(() => calculateFleetSummary(fleetAssets), [fleetAssets])
   const fleetRecommendation = useMemo(() => calculateFleetRecommendation(fleetAssets, fleetSummary), [fleetAssets, fleetSummary])
+  const selectedAsset = useMemo(
+    () => fleetAssets.find((asset) => asset.id === selectedAssetId) ?? null,
+    [fleetAssets, selectedAssetId]
+  )
   const stressDistribution = useMemo(() => ({
     low: fleetAssets.filter((asset) => asset.stress_level === 'low').length,
     medium: fleetAssets.filter((asset) => asset.stress_level === 'medium').length,
@@ -392,11 +398,15 @@ export default function Home() {
             fleetSummary={fleetSummary}
             fleetRecommendation={fleetRecommendation}
             selectedAssetIds={selectedAssetIds}
+            selectedAssetId={selectedAssetId}
+            selectedAsset={selectedAsset}
             onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
             onClearSelection={() => setSelectedAssetIds([])}
             onToggleSelected={handleToggleSelected}
             onApplyAction={handleApplyBulkAction}
             onAssetActionChange={handleAssetActionChange}
+            onOpenAssetDetail={setSelectedAssetId}
+            onCloseAssetDetail={() => setSelectedAssetId(null)}
           />
         )}
 
@@ -407,12 +417,15 @@ export default function Home() {
               assets={fleetAssets}
               summary={fleetSummary}
               selectedIds={selectedAssetIds}
+              selectedAssetId={selectedAssetId}
               onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
               onClearSelection={() => setSelectedAssetIds([])}
               onToggleSelected={handleToggleSelected}
               onApplyAction={handleApplyBulkAction}
               onAssetActionChange={handleAssetActionChange}
+              onOpenAssetDetail={setSelectedAssetId}
             />
+            <BatteryAssetDetailPanel asset={selectedAsset} schedule={scheduleData} onClose={() => setSelectedAssetId(null)} />
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <ConstraintPanel constraints={scheduleData.physical_constraints} />
               <BatteryStressCard stress={scheduleData.battery_stress} />

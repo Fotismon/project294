@@ -10,6 +10,7 @@ interface FleetManagerSectionProps {
   assets: BatteryAsset[]
   summary: FleetSummary
   selectedIds: string[]
+  selectedAssetId?: string | null
   onSelectAll: () => void
   onClearSelection: () => void
   onToggleSelected: (id: string) => void
@@ -22,6 +23,7 @@ export function FleetManagerSection({
   assets,
   summary,
   selectedIds,
+  selectedAssetId,
   onSelectAll,
   onClearSelection,
   onToggleSelected,
@@ -46,6 +48,7 @@ export function FleetManagerSection({
       <BatteryAssetTable
         assets={assets}
         selectedIds={selectedIds}
+        selectedAssetId={selectedAssetId}
         onToggleSelected={onToggleSelected}
         onActionChange={onAssetActionChange}
         onOpenAssetDetail={onOpenAssetDetail}

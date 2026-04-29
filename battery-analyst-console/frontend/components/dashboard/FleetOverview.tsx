@@ -18,6 +18,7 @@ import {
   SectionPanel,
   StressBadge
 } from '@/components/ui'
+import { BatteryAssetDetailPanel } from './BatteryAssetDetailPanel'
 import { FleetAlertsPanel } from './FleetAlertsPanel'
 import { FleetManagerSection } from './FleetManagerSection'
 import { MarketForecastSection } from './MarketForecastSection'
@@ -31,11 +32,15 @@ interface FleetOverviewProps {
   fleetSummary: FleetSummary
   fleetRecommendation: FleetRecommendation
   selectedAssetIds: string[]
+  selectedAssetId: string | null
+  selectedAsset: BatteryAsset | null
   onSelectAll: () => void
   onClearSelection: () => void
   onToggleSelected: (id: string) => void
   onApplyAction: (action: BatteryAction) => void
   onAssetActionChange: (id: string, action: BatteryAction) => void
+  onOpenAssetDetail: (assetId: string) => void
+  onCloseAssetDetail: () => void
 }
 
 function formatEuro(value: number): string {
@@ -87,11 +92,15 @@ export function FleetOverview({
   fleetSummary,
   fleetRecommendation,
   selectedAssetIds,
+  selectedAssetId,
+  selectedAsset,
   onSelectAll,
   onClearSelection,
   onToggleSelected,
   onApplyAction,
-  onAssetActionChange
+  onAssetActionChange,
+  onOpenAssetDetail,
+  onCloseAssetDetail
 }: FleetOverviewProps) {
   const hasAlerts = alerts.length > 0 || hasGeneratedAssetAlerts(fleetAssets)
 
@@ -128,16 +137,20 @@ export function FleetOverview({
               assets={fleetAssets}
               summary={fleetSummary}
               selectedIds={selectedAssetIds}
+              selectedAssetId={selectedAssetId}
               onSelectAll={onSelectAll}
               onClearSelection={onClearSelection}
               onToggleSelected={onToggleSelected}
               onApplyAction={onApplyAction}
               onAssetActionChange={onAssetActionChange}
+              onOpenAssetDetail={onOpenAssetDetail}
             />
           </SectionPanel>
         </div>
 
         <div className="space-y-6">
+          <BatteryAssetDetailPanel asset={selectedAsset} schedule={schedule} onClose={onCloseAssetDetail} />
+
           <SectionPanel title="Operational Alerts" subtitle="Risks from the latest schedule or scenario.">
             {hasAlerts ? (
               <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />
