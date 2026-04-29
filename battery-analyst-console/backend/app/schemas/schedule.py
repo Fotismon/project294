@@ -34,7 +34,34 @@ class BatteryProfile(BaseModel):
 
 class ScheduleRequest(BaseModel):
     date: str = Field(..., description="Schedule date in YYYY-MM-DD format.")
-    battery: BatteryProfile = Field(..., description="Battery profile to schedule.")
+    profile_name: str = Field("balanced", description="Battery operating profile name.")
+    prices: list[float] | None = Field(
+        None,
+        min_length=96,
+        max_length=96,
+        description="Optional forecast prices for 96 15-minute intervals.",
+    )
+    temperatures: list[float] | None = Field(
+        None,
+        description="Optional temperatures for 96 15-minute intervals.",
+    )
+    forecast_confidence: str = Field("medium", description="Forecast confidence label.")
+    market_volatility: str = Field("medium", description="Market volatility label.")
+    forecast_uncertainty_width: float | None = Field(
+        None,
+        ge=0,
+        description="Optional average forecast band width in EUR/MWh.",
+    )
+    data_quality_level: str = Field("medium", description="Input data quality label.")
+    minimum_margin_eur_per_mwh: float = Field(
+        2.0,
+        ge=0,
+        description="Minimum required margin for economic filtering.",
+    )
+    battery: BatteryProfile | None = Field(
+        None,
+        description="Legacy battery profile payload accepted for backward compatibility.",
+    )
     strategy: str = Field("spread_capture", description="Scheduling strategy name.")
     market: str = Field("day_ahead", description="Market used for the schedule.")
     country: str = Field("GR", description="Country or market zone code.")
@@ -43,17 +70,14 @@ class ScheduleRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "date": "2026-04-29",
-                "battery": {
-                    "battery_id": "battery-001",
-                    "capacity_kwh": 1000.0,
-                    "max_charge_kw": 500.0,
-                    "max_discharge_kw": 500.0,
-                    "min_soc": 0.1,
-                    "max_soc": 0.9,
-                    "current_soc": 0.5,
-                    "round_trip_efficiency": 0.88,
-                    "max_cycles_per_day": 1,
-                },
+                "profile_name": "balanced",
+                "prices": [80.0] * 44 + [35.0] * 8 + [80.0] * 28 + [120.0] * 8 + [80.0] * 8,
+                "temperatures": [25.0] * 80 + [31.0] * 8 + [25.0] * 8,
+                "forecast_confidence": "medium_high",
+                "market_volatility": "medium",
+                "forecast_uncertainty_width": 25.0,
+                "data_quality_level": "medium",
+                "minimum_margin_eur_per_mwh": 2.0,
                 "strategy": "spread_capture",
                 "market": "day_ahead",
                 "country": "GR",
