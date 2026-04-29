@@ -19,8 +19,6 @@ import { ScenarioComparisonPanel } from '@/components/dashboard/ScenarioComparis
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { ConsoleSectionId } from '@/components/dashboard/SideNav'
 import { clearApiFallback, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, runBacktest, runScenario } from '@/lib/api'
-import { mockAlerts, mockFleetAssets, mockForecastData, mockScheduleResponse } from '@/lib/mock-data'
-import { buildDefaultSchedulerInput } from '@/lib/sample-inputs'
 import {
   Alert,
   ApiStatus,
@@ -59,13 +57,15 @@ function formatDate(dateStr: string): string {
   }).format(new Date(`${dateStr}T12:00:00`))
 }
 
-function todayAthens(): string {
+function tomorrowAthens(): string {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
   return new Intl.DateTimeFormat('en-CA', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     timeZone: 'Europe/Athens'
-  }).format(new Date())
+  }).format(tomorrow)
 }
 
 function normalizeEfficiency(value: number): number {
@@ -74,6 +74,24 @@ function normalizeEfficiency(value: number): number {
 
 function scheduleAlertsOrFallback(schedule: ScheduleResponse, fallback: Alert[] = []): Alert[] {
   return schedule.alerts?.length ? schedule.alerts : fallback
+}
+
+function forecastPrices(points: ForecastPoint[]): number[] {
+  return points.map((point) => point.p50_price)
+}
+
+function forecastUncertaintyWidth(points: ForecastPoint[]): number | null {
+  if (points.length === 0) return null
+  const totalWidth = points.reduce((sum, point) => sum + Math.max(0, point.p90_price - point.p10_price), 0)
+  return Math.round((totalWidth / points.length) * 10) / 10
+}
+
+function forecastConfidence(points: ForecastPoint[]): ScheduleResponse['confidence'] {
+  const width = forecastUncertaintyWidth(points)
+  if (width == null) return 'medium'
+  if (width <= 20) return 'high'
+  if (width <= 50) return 'medium'
+  return 'low'
 }
 
 function effectiveAction(asset: BatteryAsset): EffectiveBatteryAction {
@@ -135,10 +153,10 @@ function calculateFleetRecommendation(assets: BatteryAsset[], summary: FleetSumm
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState<ConsoleSectionId>('fleet')
-  const [scheduleData, setScheduleData] = useState<ScheduleResponse>(mockScheduleResponse)
-  const [forecastData, setForecastData] = useState<ForecastPoint[]>(mockForecastData)
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts)
-  const [fleetAssets, setFleetAssets] = useState<BatteryAsset[]>(mockFleetAssets)
+  const [scheduleData, setScheduleData] = useState<ScheduleResponse | null>(null)
+  const [forecastData, setForecastData] = useState<ForecastPoint[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [fleetAssets, setFleetAssets] = useState<BatteryAsset[]>([])
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -188,7 +206,7 @@ export default function Home() {
       })
       clearApiFallback()
       try {
-        const operatingDate = todayAthens()
+        const operatingDate = tomorrowAthens()
 
         const [schedule, forecast] = await Promise.all([
           getSchedule(operatingDate, 'balanced', optimizerMode),
@@ -197,18 +215,18 @@ export default function Home() {
         if (!mounted) return
         setScheduleData(schedule)
         setForecastData(forecast)
-        setAlerts(scheduleAlertsOrFallback(schedule, mockAlerts))
+        setAlerts(scheduleAlertsOrFallback(schedule))
         const fallback = getLastApiFallback()
         if (!hasConfiguredApiBaseUrl()) {
           setApiStatus({
-            kind: 'mock',
-            message: 'Using demo fallback',
-            detail: 'NEXT_PUBLIC_API_BASE_URL is not configured. Demo forecast input is being used for scheduler calls.'
+            kind: 'error',
+            message: 'Live API not configured',
+            detail: 'NEXT_PUBLIC_API_BASE_URL is required so the app can use the backend forecast service.'
           })
         } else if (fallback) {
           setApiStatus({
             kind: 'error',
-            message: 'Live API unavailable — using demo fallback',
+            message: 'Live API unavailable',
             detail: fallback.message,
             last_updated_at: currentStatusTime()
           })
@@ -223,13 +241,13 @@ export default function Home() {
       } catch (loadError) {
         if (!mounted) return
         const detail = loadError instanceof Error ? loadError.message : String(loadError)
-        setError('Unable to load live API data. Using demo forecast input.')
-        setScheduleData(mockScheduleResponse)
-        setForecastData(mockForecastData)
-        setAlerts(scheduleAlertsOrFallback(mockScheduleResponse, mockAlerts))
+        setError('Unable to load live weather-backed forecast data. Configure the backend and retry.')
+        setScheduleData(null)
+        setForecastData([])
+        setAlerts([])
         setApiStatus({
           kind: 'error',
-          message: 'Live API unavailable — using demo fallback',
+          message: 'Live API unavailable',
           detail,
           last_updated_at: currentStatusTime()
         })
@@ -257,6 +275,17 @@ export default function Home() {
   }
 
   async function handleRunScenario() {
+    if (!scheduleData) {
+      setError('Load a live schedule before running scenarios.')
+      return
+    }
+
+    const prices = forecastPrices(forecastData)
+    if (prices.length !== 96) {
+      setError('Scenario requires 96 live forecast intervals from /forecast.')
+      return
+    }
+
     setIsScenarioRunning(true)
     setError(null)
     setApiStatus({
@@ -266,43 +295,39 @@ export default function Home() {
     })
     clearApiFallback()
     try {
-      const schedulerInput = buildDefaultSchedulerInput()
       setBaseScenarioSchedule(scheduleData)
-      const result = await runScenario(
-        {
-          date: scheduleData.date,
-          profile_name: riskAppetite,
-          prices: schedulerInput.prices,
-          temperatures: schedulerInput.temperatures,
-          round_trip_efficiency: normalizeEfficiency(roundTripEfficiency),
-          duration_hours: batteryDuration,
-          max_cycles_per_day: maxCycles,
-          degradation_cost_eur_per_mwh: degradationCost,
-          risk_appetite: riskAppetite,
-          temperature_policy: temperaturePolicy,
-          optimizer_mode: optimizerMode,
-          forecast_confidence: schedulerInput.forecast_confidence,
-          market_volatility: schedulerInput.market_volatility,
-          forecast_uncertainty_width: schedulerInput.forecast_uncertainty_width,
-          data_quality_level: schedulerInput.data_quality_level,
-          minimum_margin_eur_per_mwh: schedulerInput.minimum_margin_eur_per_mwh
-        },
-        scheduleData
-      )
+      const result = await runScenario({
+        date: scheduleData.date,
+        profile_name: riskAppetite,
+        prices,
+        temperatures: null,
+        round_trip_efficiency: normalizeEfficiency(roundTripEfficiency),
+        duration_hours: batteryDuration,
+        max_cycles_per_day: maxCycles,
+        degradation_cost_eur_per_mwh: degradationCost,
+        risk_appetite: riskAppetite,
+        temperature_policy: temperaturePolicy,
+        optimizer_mode: optimizerMode,
+        forecast_confidence: forecastConfidence(forecastData),
+        market_volatility: 'medium',
+        forecast_uncertainty_width: forecastUncertaintyWidth(forecastData),
+        data_quality_level: 'high',
+        minimum_margin_eur_per_mwh: 2
+      })
       setScenarioResult(result)
       setScheduleData(result)
       setAlerts(scheduleAlertsOrFallback(result))
-      const fallback = getLastApiFallback()
-      if (!hasConfiguredApiBaseUrl()) {
-        setApiStatus({
-          kind: 'mock',
-          message: 'Using demo fallback',
-          detail: 'NEXT_PUBLIC_API_BASE_URL is not configured. Demo forecast input is being used for scheduler calls.'
-        })
+        const fallback = getLastApiFallback()
+        if (!hasConfiguredApiBaseUrl()) {
+          setApiStatus({
+            kind: 'error',
+            message: 'Live API not configured',
+            detail: 'NEXT_PUBLIC_API_BASE_URL is required so scenarios can use the backend forecast service.'
+          })
       } else if (fallback) {
         setApiStatus({
           kind: 'error',
-          message: 'Scenario service unavailable — using demo fallback',
+          message: 'Scenario service unavailable',
           detail: fallback.message,
           last_updated_at: currentStatusTime()
         })
@@ -316,10 +341,10 @@ export default function Home() {
       }
     } catch (scenarioError) {
       const detail = scenarioError instanceof Error ? scenarioError.message : String(scenarioError)
-      setError('Scenario service unavailable. Demo scenario input remains available.')
+      setError('Scenario service unavailable. No hardcoded scenario data was used.')
       setApiStatus({
         kind: 'error',
-        message: 'Scenario service unavailable — using demo fallback',
+        message: 'Scenario service unavailable',
         detail,
         last_updated_at: currentStatusTime()
       })
@@ -352,15 +377,15 @@ export default function Home() {
       const fallback = getLastApiFallback()
       if (!hasConfiguredApiBaseUrl()) {
         setApiStatus({
-          kind: 'mock',
-          message: 'Using demo fallback',
-          detail: 'NEXT_PUBLIC_API_BASE_URL is not configured.'
+          kind: 'error',
+          message: 'Live API not configured',
+          detail: 'NEXT_PUBLIC_API_BASE_URL is required for backtesting.'
         })
       } else if (fallback) {
-        setError('Backtest data unavailable. Showing demo fallback result.')
+        setError('Backtest data unavailable. No hardcoded backtest result was used.')
         setApiStatus({
           kind: 'error',
-          message: 'Backtest data unavailable — using demo fallback',
+          message: 'Backtest data unavailable',
           detail: backtestFallbackDetail(fallback.message),
           last_updated_at: currentStatusTime()
         })
@@ -374,10 +399,10 @@ export default function Home() {
       }
     } catch (backtestError) {
       const detail = backtestError instanceof Error ? backtestError.message : String(backtestError)
-      setError('Backtest data unavailable. Showing demo fallback result.')
+      setError('Backtest data unavailable. No hardcoded backtest result was used.')
       setApiStatus({
         kind: 'error',
-        message: 'Backtest data unavailable — using demo fallback',
+        message: 'Backtest data unavailable',
         detail: backtestFallbackDetail(detail),
         last_updated_at: currentStatusTime()
       })
@@ -391,7 +416,7 @@ export default function Home() {
       activeSection={activeSection}
       onSectionChange={setActiveSection}
       apiStatus={apiStatus}
-      currentDateLabel={`Athens ${formatDate(todayAthens())}`}
+      currentDateLabel={`Athens ${formatDate(tomorrowAthens())}`}
       marketZone="GR Day-Ahead"
     >
       {apiStatus.kind !== 'connected' && <ApiStatusBanner status={apiStatus} />}
@@ -403,7 +428,7 @@ export default function Home() {
       )}
 
       <div>
-        {activeSection === 'fleet' && (
+        {activeSection === 'fleet' && scheduleData && (
           <FleetOverview
             schedule={scheduleData}
             forecastData={forecastData}
@@ -423,8 +448,9 @@ export default function Home() {
             onCloseAssetDetail={() => setSelectedAssetId(null)}
           />
         )}
+        {activeSection === 'fleet' && !scheduleData && <LiveDataUnavailablePanel />}
 
-        {activeSection === 'assets' && (
+        {activeSection === 'assets' && scheduleData && (
           <div className="space-y-6">
             <SectionHeader title="Battery Assets" subtitle="Asset-level controls, status, and operating decisions." />
             <FleetManagerSection
@@ -446,8 +472,9 @@ export default function Home() {
             </div>
           </div>
         )}
+        {activeSection === 'assets' && !scheduleData && <LiveDataUnavailablePanel />}
 
-        {activeSection === 'scenario' && (
+        {activeSection === 'scenario' && scheduleData && (
           <div className="space-y-6">
             <SectionHeader title="Scenario Analyst" subtitle="Test operating assumptions before committing a battery schedule." />
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
@@ -538,6 +565,7 @@ export default function Home() {
             )}
           </div>
         )}
+        {activeSection === 'scenario' && !scheduleData && <LiveDataUnavailablePanel />}
 
         {activeSection === 'alerts' && (
           <div className="space-y-6">
@@ -571,6 +599,18 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
     <div>
       <h2 className="text-2xl font-semibold text-text-primary">{title}</h2>
       <p className="mt-1 text-sm text-text-secondary">{subtitle}</p>
+    </div>
+  )
+}
+
+function LiveDataUnavailablePanel() {
+  return (
+    <div className="border border-error/30 bg-error/10 p-4">
+      <h2 className="text-lg font-semibold text-error">Live forecast data unavailable</h2>
+      <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-secondary">
+        The console now requires live backend responses from the weather-backed forecast pipeline. Configure
+        NEXT_PUBLIC_API_BASE_URL and make sure the backend /forecast and /schedule endpoints are running.
+      </p>
     </div>
   )
 }

@@ -28,17 +28,13 @@ import {
   ScheduleResponse,
   Severity
 } from '@/types/api'
-import {
-  getScenarioModifiedResponse,
-  mockAlerts,
-  mockBacktestResult,
-  mockFleetAssets,
-  mockForecastData,
-  mockScheduleResponse
-} from './mock-data'
-import { buildDefaultSchedulerInput } from './sample-inputs'
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ''
+const EMPTY_VALUE_RANGE: [number, number] = [0, 0]
+const PLACEHOLDER_WINDOW = {
+  start: '00:00',
+  end: '00:00',
+  avg_price: 0
+}
 
 interface ApiFallbackInfo {
   path: string
@@ -162,6 +158,12 @@ function rangeFrom(values: number[] | undefined, fallback: [number, number]): [n
   return [Math.round(values[0]), Math.round(values[1])]
 }
 
+function requireApiBaseUrl(): void {
+  if (!API_BASE_URL) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is required. Configure it so the app can use live backend forecast data.')
+  }
+}
+
 function normalizeEfficiency(value: number | null | undefined): number | null {
   if (value == null) return null
   return value > 1 ? value / 100 : value
@@ -172,17 +174,6 @@ function normalizeTemperaturePolicy(value: string | undefined): 'relaxed' | 'nor
   if (value === 'permissive') return 'relaxed'
   if (value === 'conservative') return 'strict'
   return 'normal'
-}
-
-function normalizeMockTemperaturePolicy(value: string | undefined): 'permissive' | 'balanced' | 'conservative' {
-  if (value === 'relaxed' || value === 'permissive') return 'permissive'
-  if (value === 'strict' || value === 'conservative') return 'conservative'
-  return 'balanced'
-}
-
-function scenarioEfficiencyPercent(value: number | null | undefined): number {
-  const normalized = normalizeEfficiency(value)
-  return normalized == null ? 90 : normalized * 100
 }
 
 function profileName(value: RiskAppetite | string | undefined): RiskAppetite | string {
@@ -223,12 +214,12 @@ function mapBackendAlert(alert: BackendAlert): Alert {
 }
 
 function mapAlternative(alt: BackendAlternativeSchedule, fallbackDecision: Decision): AlternativeSchedule {
-  const valueRange = rangeFrom(alt.expected_value_range_eur, mockScheduleResponse.expected_value_range_eur)
+  const valueRange = rangeFrom(alt.expected_value_range_eur, EMPTY_VALUE_RANGE)
 
   return {
     label: alt.label,
-    charge_window: alt.charge_window ?? mockScheduleResponse.charge_window,
-    discharge_window: alt.discharge_window ?? mockScheduleResponse.discharge_window,
+    charge_window: alt.charge_window ?? PLACEHOLDER_WINDOW,
+    discharge_window: alt.discharge_window ?? PLACEHOLDER_WINDOW,
     expected_value_range_eur: alt.expected_value_range_eur,
     reason: alt.reason,
     spread_after_efficiency: Math.max(0, valueRange[1] - valueRange[0]),
@@ -244,12 +235,12 @@ function mapSchedule(response: BackendScheduleResponse): ScheduleResponse {
     date: response.date,
     decision,
     confidence: asConfidence(response.confidence),
-    optimizer: response.optimizer ?? mockScheduleResponse.optimizer,
-    diagnostics: response.diagnostics ?? mockScheduleResponse.diagnostics,
+    optimizer: response.optimizer,
+    diagnostics: response.diagnostics,
     charge_window: response.charge_window,
     discharge_window: response.discharge_window,
     spread_after_efficiency: response.spread_after_efficiency,
-    expected_value_range_eur: rangeFrom(response.expected_value_range_eur, mockScheduleResponse.expected_value_range_eur),
+    expected_value_range_eur: rangeFrom(response.expected_value_range_eur, EMPTY_VALUE_RANGE),
     soc_feasibility: {
       feasible: response.soc_feasibility.feasible,
       min_soc: response.soc_feasibility.min_soc,
@@ -301,45 +292,50 @@ function scheduleRequest(
   date: string,
   batteryProfile?: RiskAppetite | string,
   optimizerMode: OptimizerMode = 'window_v1',
-  forecastOverrides?: { prices: number[]; forecast_uncertainty_width: number; forecast_confidence: Confidence }
+  forecastInput?: { prices: number[]; forecast_uncertainty_width: number; forecast_confidence: Confidence }
 ): BackendScheduleRequest {
-  const schedulerInput = buildDefaultSchedulerInput()
+  if (!forecastInput || forecastInput.prices.length !== 96) {
+    throw new Error('Live forecast data must contain 96 price intervals before requesting a schedule.')
+  }
 
   return {
     date,
     profile_name: profileName(batteryProfile),
     optimizer_mode: optimizerMode,
-    prices: forecastOverrides?.prices ?? schedulerInput.prices,
-    temperatures: schedulerInput.temperatures,
-    forecast_confidence: forecastOverrides?.forecast_confidence ?? schedulerInput.forecast_confidence,
-    market_volatility: schedulerInput.market_volatility,
-    forecast_uncertainty_width: forecastOverrides?.forecast_uncertainty_width ?? schedulerInput.forecast_uncertainty_width,
-    data_quality_level: schedulerInput.data_quality_level,
-    minimum_margin_eur_per_mwh: schedulerInput.minimum_margin_eur_per_mwh,
+    prices: forecastInput.prices,
+    temperatures: null,
+    forecast_confidence: forecastInput.forecast_confidence,
+    market_volatility: 'medium',
+    forecast_uncertainty_width: forecastInput.forecast_uncertainty_width,
+    data_quality_level: 'high',
+    minimum_margin_eur_per_mwh: 2,
   }
 }
 
 function scenarioRequest(payload: ScenarioRequest): BackendScenarioRequest {
-  const schedulerInput = buildDefaultSchedulerInput()
   const profile = profileName(payload.profile_name || payload.battery_profile || payload.risk_appetite)
+
+  if (!payload.prices?.length || payload.prices.length !== 96) {
+    throw new Error('Scenario requests require 96 live forecast price intervals.')
+  }
 
   return {
     date: payload.date,
     profile_name: profile,
     optimizer_mode: payload.optimizer_mode ?? 'window_v1',
-    prices: payload.prices?.length ? payload.prices : schedulerInput.prices,
-    temperatures: payload.temperatures?.length ? payload.temperatures : schedulerInput.temperatures,
+    prices: payload.prices,
+    temperatures: payload.temperatures?.length ? payload.temperatures : null,
     round_trip_efficiency: normalizeEfficiency(payload.round_trip_efficiency),
     duration_hours: payload.duration_hours ?? payload.battery_duration_hours ?? null,
     max_cycles_per_day: payload.max_cycles_per_day ?? null,
     degradation_cost_eur_per_mwh: payload.degradation_cost_eur_per_mwh ?? payload.degradation_cost_eur_per_cycle ?? null,
     temperature_policy: normalizeTemperaturePolicy(payload.temperature_policy),
     risk_appetite: payload.risk_appetite,
-    forecast_confidence: payload.forecast_confidence ?? schedulerInput.forecast_confidence,
-    market_volatility: payload.market_volatility ?? schedulerInput.market_volatility,
-    forecast_uncertainty_width: payload.forecast_uncertainty_width ?? schedulerInput.forecast_uncertainty_width,
-    data_quality_level: payload.data_quality_level ?? schedulerInput.data_quality_level,
-    minimum_margin_eur_per_mwh: payload.minimum_margin_eur_per_mwh ?? schedulerInput.minimum_margin_eur_per_mwh
+    forecast_confidence: payload.forecast_confidence ?? 'medium',
+    market_volatility: payload.market_volatility ?? 'medium',
+    forecast_uncertainty_width: payload.forecast_uncertainty_width ?? null,
+    data_quality_level: payload.data_quality_level ?? 'high',
+    minimum_margin_eur_per_mwh: payload.minimum_margin_eur_per_mwh ?? 2
   }
 }
 
@@ -353,30 +349,6 @@ function backtestRequest(payload: BacktestRequest): BackendBacktestRequest {
     market_volatility: payload.market_volatility ?? 'medium',
     data_quality_level: payload.data_quality_level ?? 'medium',
     minimum_margin_eur_per_mwh: payload.minimum_margin_eur_per_mwh ?? 2
-  }
-}
-
-function withMockOptimizer(schedule: ScheduleResponse, optimizerMode: OptimizerMode = 'window_v1'): ScheduleResponse {
-  if (optimizerMode === 'window_v1') {
-    return {
-      ...schedule,
-      optimizer: mockScheduleResponse.optimizer,
-      diagnostics: schedule.diagnostics ?? mockScheduleResponse.diagnostics
-    }
-  }
-
-  return {
-    ...schedule,
-    optimizer: {
-      requested_mode: optimizerMode,
-      used_mode: 'window_v1',
-      fallback_used: true,
-      fallback_reason: 'Live optimizer unavailable in demo fallback; showing Window V1 sample data.',
-      model_version: 'window_v1.2',
-      is_optimal: false,
-      solver_status: 'demo_fallback'
-    },
-    diagnostics: schedule.diagnostics ?? mockScheduleResponse.diagnostics
   }
 }
 
@@ -417,57 +389,40 @@ function mapBacktest(response: BackendBacktestResponse): BacktestResponse {
     realized_value_eur: Math.round(realized),
     actual_spread: economic?.realized_spread_after_efficiency ?? 0,
     recommendation_quality: deriveBacktestQuality(response.decision, realized, valueError),
-    forecast_points: mockBacktestResult.forecast_points
+    forecast_points: undefined
   }
 }
 
 export async function getForecast(date: string): Promise<ForecastPoint[]> {
-  if (!API_BASE_URL) return mockForecastData
+  requireApiBaseUrl()
 
   try {
     return mapForecast(await fetchJson<BackendForecastResponse>(`/forecast?date=${date}`))
   } catch (error) {
-    console.warn('Forecast API unavailable, using demo fallback data:', error)
     recordApiFallback('/forecast', error)
-    return mockForecastData
+    throw error
   }
 }
 
 export async function getSchedule(date: string, batteryProfile?: RiskAppetite | string, optimizerMode: OptimizerMode = 'window_v1'): Promise<ScheduleResponse> {
-  if (!API_BASE_URL) return withMockOptimizer(mockScheduleResponse, optimizerMode)
+  requireApiBaseUrl()
 
   try {
-    // Fetch the real forecast first so the schedule uses model-predicted prices.
-    let forecastOverrides: { prices: number[]; forecast_uncertainty_width: number; forecast_confidence: Confidence } | undefined
-    try {
-      const rawForecast = await fetchJson<BackendForecastResponse>(`/forecast?date=${date}`)
-      forecastOverrides = forecastToScheduleInputs(rawForecast)
-    } catch {
-      // Forecast unavailable — schedule will fall back to sample prices.
-    }
+    const rawForecast = await fetchJson<BackendForecastResponse>(`/forecast?date=${date}`)
+    const forecastInput = forecastToScheduleInputs(rawForecast)
 
     return mapSchedule(await fetchJson<BackendScheduleResponse>('/schedule', {
       method: 'POST',
-      body: JSON.stringify(scheduleRequest(date, batteryProfile, optimizerMode, forecastOverrides))
+      body: JSON.stringify(scheduleRequest(date, batteryProfile, optimizerMode, forecastInput))
     }))
   } catch (error) {
-    console.warn('Schedule API unavailable, using demo fallback data:', error)
     recordApiFallback('/schedule', error)
-    return withMockOptimizer(mockScheduleResponse, optimizerMode)
+    throw error
   }
 }
 
-export async function runScenario(payload: ScenarioRequest, baseline: ScheduleResponse = mockScheduleResponse): Promise<ScheduleResponse> {
-  if (!API_BASE_URL) {
-    return withMockOptimizer(getScenarioModifiedResponse(
-      scenarioEfficiencyPercent(payload.round_trip_efficiency),
-      payload.duration_hours ?? payload.battery_duration_hours ?? 2,
-      payload.max_cycles_per_day ?? 1,
-      payload.risk_appetite,
-      normalizeMockTemperaturePolicy(payload.temperature_policy),
-      payload.degradation_cost_eur_per_mwh ?? payload.degradation_cost_eur_per_cycle ?? 10
-    ), payload.optimizer_mode ?? 'window_v1')
-  }
+export async function runScenario(payload: ScenarioRequest): Promise<ScheduleResponse> {
+  requireApiBaseUrl()
 
   try {
     const scenario = await fetchJson<BackendScheduleResponse>('/scenario', {
@@ -476,28 +431,13 @@ export async function runScenario(payload: ScenarioRequest, baseline: ScheduleRe
     })
     return mapSchedule(scenario)
   } catch (error) {
-    console.warn('Scenario API unavailable, using demo fallback data:', error)
     recordApiFallback('/scenario', error)
-    return withMockOptimizer(getScenarioModifiedResponse(
-      scenarioEfficiencyPercent(payload.round_trip_efficiency),
-      payload.duration_hours ?? payload.battery_duration_hours ?? 2,
-      payload.max_cycles_per_day ?? 1,
-      payload.risk_appetite,
-      normalizeMockTemperaturePolicy(payload.temperature_policy),
-      payload.degradation_cost_eur_per_mwh ?? payload.degradation_cost_eur_per_cycle ?? 10
-    ), payload.optimizer_mode ?? 'window_v1')
+    throw error
   }
 }
 
 export async function runBacktest(payload: BacktestRequest): Promise<BacktestResponse> {
-  if (!API_BASE_URL) {
-    return {
-      ...mockBacktestResult,
-      schedule_response: mockBacktestResult.schedule_response
-        ? withMockOptimizer(mockBacktestResult.schedule_response, payload.optimizer_mode ?? 'window_v1')
-        : null
-    }
-  }
+  requireApiBaseUrl()
 
   try {
     return mapBacktest(
@@ -507,35 +447,25 @@ export async function runBacktest(payload: BacktestRequest): Promise<BacktestRes
       })
     )
   } catch (error) {
-    console.warn('Backtest API unavailable, using demo fallback data:', error)
     recordApiFallback('/backtest', error)
-    return {
-      ...mockBacktestResult,
-      schedule_response: mockBacktestResult.schedule_response
-        ? withMockOptimizer(mockBacktestResult.schedule_response, payload.optimizer_mode ?? 'window_v1')
-        : null,
-      warnings: ['Backtest data unavailable. Showing demo fallback result.', ...mockBacktestResult.warnings]
-    }
+    throw error
   }
 }
 
 export async function getAlerts(): Promise<Alert[]> {
   // No dedicated /alerts endpoint exists yet.
   // Alerts are returned as part of /schedule and /scenario responses.
-  return mockAlerts
+  return []
 }
 
 export async function getFleet(): Promise<FleetResponse> {
-  if (!API_BASE_URL) {
-    return { assets: mockFleetAssets, summary: mapFleetSummary(mockFleetAssets) }
-  }
+  requireApiBaseUrl()
 
   try {
     return await fetchJson<FleetResponse>('/fleet')
   } catch (error) {
-    console.warn('Fleet API unavailable, using demo fallback data:', error)
     recordApiFallback('/fleet', error)
-    return { assets: mockFleetAssets, summary: mapFleetSummary(mockFleetAssets) }
+    throw error
   }
 }
 
