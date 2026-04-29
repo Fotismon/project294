@@ -13,5 +13,6 @@ Task 6.2 adds battery stress scoring. It uses EFC, temperature risk, action dura
 Task 6.3 adds decision confidence scoring. It uses spread strength, forecast uncertainty width, data quality level, temperature risk, and SoC feasibility as an explainable MVP confidence indicator.
 Task 6.4 adds the final recommendation builder. It combines score, stress, confidence, economics, physical constraints, and SoC feasibility into `execute`, `execute_with_caution`, `watch`, or `hold`.
 Task 8.1 adds backend-generated analyst alerts for no-go days, forecast uncertainty, temperature risk, weak spread, SoC feasibility, and data quality.
+Task 8.2 wires generated analyst alerts into `/scenario`, alongside scenario metadata alerts for temperature policy, risk appetite, effective margin, and applied overrides.
 
-These alerts are analyst warnings, not external notifications. This is not a full simulator or degradation model: it does not model nonlinear battery behavior, aging curves, thermal capacity effects, ramp rates, or execution uncertainty. API integration will happen later.
+`/scenario` now includes no-go day, forecast uncertainty, temperature risk, weak spread, SoC feasibility, data quality, and scenario metadata alerts. These alerts are analyst warnings, not external notifications. This is not a full simulator or degradation model: it does not model nonlinear battery behavior, aging curves, thermal capacity effects, ramp rates, or execution uncertainty.

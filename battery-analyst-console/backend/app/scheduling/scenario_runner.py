@@ -9,6 +9,10 @@ from app.schemas.schedule import (
     SoCFeasibility,
     Window,
 )
+from app.scheduling.alerts import (
+    convert_analyst_alert_to_schedule_alert,
+    generate_alerts,
+)
 from app.scheduling.constraints import filter_physical_constraints
 from app.scheduling.economics import filter_economic_schedules
 from app.scheduling.pairing import pair_charge_discharge_windows
@@ -150,14 +154,11 @@ def recommendation_to_schedule_response(
     confidence = selected.confidence
 
     base_value = economic_schedule.net_spread_after_costs * soc_result.total_mwh_discharged
-    warning_alerts = [
-        Alert(level="warning", message=reason, metric="physical_warning")
-        for reason in physical_result.warning_reasons
-    ]
-    scenario_alerts = [
-        Alert(level="info", message=note, metric="scenario")
-        for note in scenario_notes(request, effective_margin)
-    ]
+    alerts = build_schedule_alerts(
+        recommendation=recommendation,
+        request=request,
+        effective_margin=effective_margin,
+    )
 
     explanation = recommendation.explanation + [
         (
@@ -209,7 +210,7 @@ def recommendation_to_schedule_response(
             recommended_to_alternative(index, alternative)
             for index, alternative in enumerate(recommendation.alternatives, start=1)
         ],
-        alerts=warning_alerts + scenario_alerts,
+        alerts=alerts,
         explanation=explanation,
     )
 
@@ -257,6 +258,11 @@ def hold_schedule_response(
 
     hold_reasons = recommendation.hold_reasons or ["No feasible schedule found."]
     placeholder_window = Window(start="00:00", end="00:00", avg_price=0.0)
+    alerts = build_schedule_alerts(
+        recommendation=recommendation,
+        request=request,
+        effective_margin=None,
+    )
 
     return ScheduleResponse(
         date=request.date,
@@ -287,31 +293,76 @@ def hold_schedule_response(
             rapid_switching_avoided=True,
         ),
         alternatives=[],
-        alerts=[
-            Alert(level="warning", message=reason, metric="hold_reason")
-            for reason in hold_reasons
-        ],
+        alerts=alerts,
         explanation=recommendation.explanation,
     )
 
 
-def scenario_notes(request: ScenarioOverrideRequest, effective_margin: float) -> list[str]:
+def build_schedule_alerts(
+    recommendation: FinalRecommendation,
+    request: ScenarioOverrideRequest,
+    effective_margin: float | None,
+) -> list[Alert]:
+    """Build generated analyst alerts followed by scenario metadata alerts."""
+
+    analyst_alerts = generate_alerts(
+        recommendation=recommendation,
+        forecast_uncertainty_width=request.forecast_uncertainty_width,
+        data_quality_level=request.data_quality_level,
+    )
+    schedule_alerts = [
+        convert_analyst_alert_to_schedule_alert(alert)
+        for alert in analyst_alerts
+    ]
+    scenario_metadata_alerts = [
+        Alert(level="info", message=note, metric="scenario")
+        for note in scenario_notes(request, effective_margin)
+    ]
+
+    return deduplicate_schedule_alerts(schedule_alerts + scenario_metadata_alerts)
+
+
+def deduplicate_schedule_alerts(alerts: list[Alert]) -> list[Alert]:
+    """Remove duplicate ScheduleResponse alerts while preserving order."""
+
+    seen: set[tuple[str, str | None, str]] = set()
+    deduplicated: list[Alert] = []
+    for alert in alerts:
+        key = (alert.level, alert.metric, alert.message)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduplicated.append(alert)
+
+    return deduplicated
+
+
+def scenario_notes(
+    request: ScenarioOverrideRequest,
+    effective_margin: float | None,
+) -> list[str]:
     """Return short notes describing scenario settings and applied overrides."""
 
     notes = [
         f"Temperature policy: {request.temperature_policy}.",
         f"Risk appetite: {request.risk_appetite}.",
-        f"Effective minimum margin: {effective_margin} EUR/MWh.",
     ]
+    if effective_margin is not None:
+        notes.append(f"Effective minimum margin: {effective_margin} EUR/MWh.")
     if request.round_trip_efficiency is not None:
-        notes.append(f"Round-trip efficiency override: {request.round_trip_efficiency}.")
+        notes.append(
+            f"round_trip_efficiency override applied: {request.round_trip_efficiency}."
+        )
     if request.duration_hours is not None:
-        notes.append(f"Duration override: {request.duration_hours} hours.")
+        notes.append(f"duration_hours override applied: {request.duration_hours}.")
     if request.max_cycles_per_day is not None:
-        notes.append(f"Max cycles override: {request.max_cycles_per_day}.")
+        notes.append(
+            f"max_cycles_per_day override applied: {request.max_cycles_per_day}."
+        )
     if request.degradation_cost_eur_per_mwh is not None:
         notes.append(
-            f"Degradation cost override: {request.degradation_cost_eur_per_mwh} EUR/MWh."
+            "degradation_cost_eur_per_mwh override applied: "
+            f"{request.degradation_cost_eur_per_mwh}."
         )
 
     return notes
