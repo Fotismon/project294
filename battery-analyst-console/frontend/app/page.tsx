@@ -8,10 +8,12 @@ import { BatteryAssetDetailPanel } from '@/components/dashboard/BatteryAssetDeta
 import { BatteryStressCard } from '@/components/dashboard/BatteryStressCard'
 import { ConstraintPanel } from '@/components/dashboard/ConstraintPanel'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
+import { DispatchDiagnosticsPanel } from '@/components/dashboard/DispatchDiagnosticsPanel'
 import { FleetAlertsPanel } from '@/components/dashboard/FleetAlertsPanel'
 import { FleetOverview } from '@/components/dashboard/FleetOverview'
 import { FleetManagerSection } from '@/components/dashboard/FleetManagerSection'
 import { NoActionPanel } from '@/components/dashboard/NoActionPanel'
+import { OptimizerBadge } from '@/components/dashboard/OptimizerBadge'
 import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
 import { ScenarioComparisonPanel } from '@/components/dashboard/ScenarioComparisonPanel'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
@@ -30,6 +32,7 @@ import {
   FleetRecommendation,
   FleetSummary,
   ForecastPoint,
+  OptimizerMode,
   RiskAppetite,
   ScheduleResponse,
   TemperaturePolicy
@@ -151,6 +154,7 @@ export default function Home() {
   const [degradationCost, setDegradationCost] = useState(10)
   const [riskAppetite, setRiskAppetite] = useState<RiskAppetite>('balanced')
   const [temperaturePolicy, setTemperaturePolicy] = useState<TemperaturePolicy>('normal')
+  const [optimizerMode, setOptimizerMode] = useState<OptimizerMode>('window_v1')
   const [isScenarioRunning, setIsScenarioRunning] = useState(false)
   const [baseScenarioSchedule, setBaseScenarioSchedule] = useState<ScheduleResponse | null>(null)
   const [scenarioResult, setScenarioResult] = useState<ScheduleResponse | null>(null)
@@ -185,7 +189,7 @@ export default function Home() {
       clearApiFallback()
       try {
         const [schedule, forecast] = await Promise.all([
-          getSchedule(mockScheduleResponse.date, 'balanced'),
+          getSchedule(mockScheduleResponse.date, 'balanced', optimizerMode),
           getForecast(mockScheduleResponse.date)
         ])
         if (!mounted) return
@@ -236,7 +240,7 @@ export default function Home() {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [optimizerMode])
 
   function handleToggleSelected(id: string) {
     setSelectedAssetIds((current) => current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id])
@@ -274,6 +278,7 @@ export default function Home() {
           degradation_cost_eur_per_mwh: degradationCost,
           risk_appetite: riskAppetite,
           temperature_policy: temperaturePolicy,
+          optimizer_mode: optimizerMode,
           forecast_confidence: schedulerInput.forecast_confidence,
           market_volatility: schedulerInput.market_volatility,
           forecast_uncertainty_width: schedulerInput.forecast_uncertainty_width,
@@ -336,6 +341,7 @@ export default function Home() {
         profile_name: backtestProfile,
         lookback_days: 7,
         forecast_method: 'lookback_average',
+        optimizer_mode: optimizerMode,
         market_volatility: 'medium',
         data_quality_level: 'medium',
         minimum_margin_eur_per_mwh: 2
@@ -457,6 +463,8 @@ export default function Home() {
                   onRiskAppetiteChange={setRiskAppetite}
                   temperaturePolicy={temperaturePolicy}
                   onTemperaturePolicyChange={setTemperaturePolicy}
+                  optimizerMode={optimizerMode}
+                  onOptimizerModeChange={setOptimizerMode}
                   onRunScenario={handleRunScenario}
                   isRunning={isScenarioRunning}
                 />
@@ -464,10 +472,15 @@ export default function Home() {
 
               <div className="space-y-4">
                 <div className="border border-border bg-surface-elevated/50 p-4">
-                  <p className="text-xs uppercase tracking-wider text-text-secondary">Result summary</p>
-                  <p className="mt-1 text-sm text-text-muted">
-                    {scenarioResult ? 'Latest scenario result is now the active schedule.' : 'Recompute a recommendation to compare against the base case.'}
-                  </p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wider text-text-secondary">Result summary</p>
+                      <p className="mt-1 text-sm text-text-muted">
+                        {scenarioResult ? 'Latest scenario result is now the active schedule.' : 'Recompute a recommendation to compare against the base case.'}
+                      </p>
+                    </div>
+                    <OptimizerBadge optimizer={scheduleData.optimizer} />
+                  </div>
                 </div>
 
                 {scheduleData.decision === 'hold' ? (
@@ -482,6 +495,8 @@ export default function Home() {
               baseSchedule={baseScenarioSchedule}
               scenarioSchedule={scenarioResult}
             />
+
+            <DispatchDiagnosticsPanel diagnostics={scheduleData.diagnostics} optimizer={scheduleData.optimizer} />
 
             <div className="border border-border bg-surface-elevated/50 p-4">
               <h3 className="text-xs uppercase tracking-wider text-text-secondary">Scenario reasoning</h3>

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { RiskAppetite, TemperaturePolicy } from '@/types/api'
+import { OptimizerMode, RiskAppetite, TemperaturePolicy } from '@/types/api'
 
 interface ScenarioControlsProps {
   roundTripEfficiency: number
@@ -16,6 +16,8 @@ interface ScenarioControlsProps {
   onRiskAppetiteChange: (value: RiskAppetite) => void
   temperaturePolicy: TemperaturePolicy
   onTemperaturePolicyChange: (value: TemperaturePolicy) => void
+  optimizerMode: OptimizerMode
+  onOptimizerModeChange: (value: OptimizerMode) => void
   onRunScenario: () => void
   isRunning?: boolean
 }
@@ -33,6 +35,8 @@ export function ScenarioControls({
   onRiskAppetiteChange,
   temperaturePolicy,
   onTemperaturePolicyChange,
+  optimizerMode,
+  onOptimizerModeChange,
   onRunScenario,
   isRunning = false
 }: ScenarioControlsProps) {
@@ -45,6 +49,11 @@ export function ScenarioControls({
     relaxed: 'Relaxed policy allows slightly warmer operating windows.',
     normal: 'Normal policy uses standard temperature thresholds.',
     strict: 'Strict temperature policy avoids warmer operating windows.'
+  }
+  const optimizerDescription: Record<OptimizerMode, string> = {
+    window_v1: 'Transparent rolling-window scheduler.',
+    milp: 'Optimization across all 96 intervals.',
+    auto: 'Try MILP and fallback to Window V1.'
   }
 
   return (
@@ -115,9 +124,23 @@ export function ScenarioControls({
           <option value="normal">Normal</option>
           <option value="strict">Strict</option>
         </SelectControl>
+
+        <SelectControl
+          label="Optimizer mode"
+          value={optimizerMode}
+          onChange={(value) => onOptimizerModeChange(value as OptimizerMode)}
+          description={optimizerDescription[optimizerMode]}
+        >
+          <option value="window_v1">Window V1</option>
+          <option value="milp">MILP</option>
+          <option value="auto">Auto</option>
+        </SelectControl>
       </div>
 
       <div className="mt-4 border-t border-border pt-4">
+        <p className="mb-3 text-xs leading-relaxed text-text-muted">
+          Window V1 is transparent and fast. MILP solves all 96 intervals jointly. Auto tries MILP and falls back to Window V1.
+        </p>
         <button
           onClick={onRunScenario}
           disabled={isRunning}

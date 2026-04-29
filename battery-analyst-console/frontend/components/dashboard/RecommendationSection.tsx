@@ -15,6 +15,7 @@ import { AlternativesPanel } from './AlternativesPanel'
 import { BatteryStressCard } from './BatteryStressCard'
 import { ConstraintPanel } from './ConstraintPanel'
 import { NoActionPanel } from './NoActionPanel'
+import { OptimizerBadge } from './OptimizerBadge'
 import { SoCFeasibilityCard } from './SoCFeasibilityCard'
 
 interface RecommendationSectionProps {
@@ -180,6 +181,7 @@ export function RecommendationSection({ schedule, fleetRecommendation }: Recomme
     return (
       <div className="space-y-5">
         <NoActionPanel schedule={schedule} />
+        <OptimizerBadge optimizer={schedule.optimizer} />
 
         {fleetRecommendation.warnings.length > 0 && (
           <div className="border border-warning/30 bg-warning/10 p-4">
@@ -217,6 +219,7 @@ export function RecommendationSection({ schedule, fleetRecommendation }: Recomme
             <DecisionBadge decision={schedule.decision} size="md" />
             <ConfidenceBadge confidence={schedule.confidence} size="md" />
             <StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} size="md" />
+            <OptimizerBadge optimizer={schedule.optimizer} compact />
           </div>
           <h3 className="mt-4 text-2xl font-semibold text-text-primary">{actionHeadline(schedule.decision)}</h3>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-secondary">{actionDescription(schedule)}</p>

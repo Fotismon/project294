@@ -57,3 +57,38 @@ violations.
 
 These judge-facing metrics are computed for the current window scheduler and
 use the same dispatch-vector shape that future MILP output can populate.
+
+## MILP optimizer v1
+
+`milp.py` contains a standalone PuLP-based battery dispatch optimizer. It is not
+connected to `/schedule` or `/scenario` yet. The model enforces SoC bounds,
+charge/discharge power limits, mutual exclusivity, daily cycle throughput,
+terminal SoC tolerance, ramp-rate limits, grid connection limits, degradation
+cost, and auxiliary load in the objective.
+
+Run the standalone validation example from the backend folder:
+
+```bash
+python -m app.scheduling.milp_example
+```
+
+## MILP response conversion
+
+`milp_response.py` converts standalone MILP dispatch results into the existing
+`ScheduleResponse` contract without connecting MILP to the API. Primary charge
+and discharge windows are extracted from dispatch blocks, diagnostics are
+preserved, and optimizer metadata identifies the result as `milp_v1`.
+
+API integration and fallback behavior are intentionally left for a later phase.
+
+## Optimizer modes
+
+`/schedule` and `/scenario` accept `optimizer_mode`:
+
+- `window_v1`: transparent window-based scheduler.
+- `milp`: mixed-integer optimizer over 96 intervals.
+- `auto`: try MILP first, then fall back to `window_v1`.
+
+Forced `milp` returns a valid hold response if MILP is infeasible or unavailable.
+`auto` returns a `window_v1` response with `fallback_used=true` and a clear
+fallback reason if MILP fails.

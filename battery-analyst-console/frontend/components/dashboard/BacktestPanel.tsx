@@ -16,6 +16,7 @@ import {
   SectionPanel,
   StatusBadge
 } from '@/components/ui'
+import { OptimizerBadge } from './OptimizerBadge'
 
 interface BacktestPanelProps {
   date: string
@@ -239,6 +240,13 @@ export function BacktestPanel({
                 <p className="mt-2 text-sm text-text-secondary">
                   This is a valid backtest outcome when the forecasted spread does not justify an executable schedule.
                 </p>
+              </div>
+            )}
+
+            {result.schedule_response?.optimizer && (
+              <div className="border border-border bg-surface p-4">
+                <p className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Optimizer context</p>
+                <OptimizerBadge optimizer={result.schedule_response.optimizer} />
               </div>
             )}
 

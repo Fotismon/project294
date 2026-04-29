@@ -11,6 +11,7 @@ import {
   StatusBadge,
   StressBadge
 } from '@/components/ui'
+import { OptimizerBadge } from './OptimizerBadge'
 
 interface BatteryAssetDetailPanelProps {
   asset: BatteryAsset | null
@@ -222,6 +223,7 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
             <div className="flex flex-wrap gap-2">
               <DecisionBadge decision={schedule.decision} />
               <ConfidenceBadge confidence={schedule.confidence} />
+              <OptimizerBadge optimizer={schedule.optimizer} compact />
             </div>
             {scheduleHold ? (
               <div className="border border-warning/30 bg-warning/10 p-3">

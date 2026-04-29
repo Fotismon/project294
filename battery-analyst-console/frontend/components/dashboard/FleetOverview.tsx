@@ -19,10 +19,12 @@ import {
   StressBadge
 } from '@/components/ui'
 import { BatteryAssetDetailPanel } from './BatteryAssetDetailPanel'
+import { DispatchDiagnosticsPanel } from './DispatchDiagnosticsPanel'
 import { FleetAlertsPanel } from './FleetAlertsPanel'
 import { FleetManagerSection } from './FleetManagerSection'
 import { MarketForecastSection } from './MarketForecastSection'
 import { OpinionatedRecommendationPanel } from './OpinionatedRecommendationPanel'
+import { OptimizerBadge } from './OptimizerBadge'
 import { ProfitHealthComparisonCard } from './ProfitHealthComparisonCard'
 import { RecommendationSection } from './RecommendationSection'
 import { ScheduleTradeoffMatrix } from './ScheduleTradeoffMatrix'
@@ -109,9 +111,12 @@ export function FleetOverview({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-text-primary">Fleet Overview</h2>
-        <p className="mt-1 text-sm text-text-secondary">Portfolio decision, market signal, asset actions, and operational risk.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-text-primary">Fleet Overview</h2>
+          <p className="mt-1 text-sm text-text-secondary">Portfolio decision, market signal, asset actions, and operational risk.</p>
+        </div>
+        <OptimizerBadge optimizer={schedule.optimizer} />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 min-[1440px]:grid-cols-6">
@@ -176,6 +181,8 @@ export function FleetOverview({
               />
             )}
           </SectionPanel>
+
+          <DispatchDiagnosticsPanel diagnostics={schedule.diagnostics} optimizer={schedule.optimizer} compact />
         </div>
       </div>
     </div>

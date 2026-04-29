@@ -69,6 +69,30 @@ export const mockScheduleResponse: ScheduleResponse = {
   date: '2026-04-29',
   decision: 'execute_with_caution',
   confidence: 'medium_high',
+  optimizer: {
+    requested_mode: 'window_v1',
+    used_mode: 'window_v1',
+    fallback_used: false,
+    fallback_reason: null,
+    model_version: 'window_v1.2',
+    is_optimal: false,
+    solver_status: null
+  },
+  diagnostics: {
+    total_mwh_charged: 100,
+    total_mwh_discharged: 100,
+    equivalent_full_cycles: 0.3333,
+    auxiliary_load_mw: 2,
+    auxiliary_energy_mwh: 2,
+    simultaneous_action_violations: 0,
+    max_grid_power_mw: 100,
+    grid_connection_limit_mw: 100,
+    grid_connection_limit_ok: true,
+    terminal_soc_error: 0.0351,
+    soc_min_violation_count: 0,
+    soc_max_violation_count: 0,
+    ramp_rate_violations: 0
+  },
   charge_window: {
     start: '11:00',
     end: '13:00',

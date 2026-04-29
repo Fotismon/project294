@@ -16,6 +16,7 @@ export type BatteryAction = 'auto' | 'charge' | 'discharge' | 'idle'
 export type EffectiveBatteryAction = Exclude<BatteryAction, 'auto'>
 export type FleetForecastAction = EffectiveBatteryAction | 'mixed'
 export type ApiStatusKind = 'connected' | 'mock' | 'error' | 'loading'
+export type OptimizerMode = 'window_v1' | 'milp' | 'auto'
 
 export interface ApiStatus {
   kind: ApiStatusKind
@@ -130,6 +131,33 @@ export interface Alert {
   recommended_action: string
 }
 
+export interface OptimizerMetadata {
+  requested_mode: OptimizerMode | string
+  used_mode: 'window_v1' | 'milp' | string
+  fallback_used: boolean
+  fallback_reason: string | null
+  model_version: string
+  is_optimal: boolean
+  solver_status: string | null
+  objective_value?: number | null
+}
+
+export interface DispatchDiagnostics {
+  total_mwh_charged: number
+  total_mwh_discharged: number
+  equivalent_full_cycles: number
+  auxiliary_load_mw: number
+  auxiliary_energy_mwh: number
+  simultaneous_action_violations: number
+  max_grid_power_mw: number
+  grid_connection_limit_mw: number
+  grid_connection_limit_ok: boolean
+  terminal_soc_error: number
+  soc_min_violation_count: number
+  soc_max_violation_count: number
+  ramp_rate_violations: number
+}
+
 export interface AlternativeSchedule {
   label?: string
   charge_window: Window | null
@@ -159,6 +187,8 @@ export interface ScheduleResponse {
   date: string
   decision: Decision
   confidence: Confidence
+  optimizer?: OptimizerMetadata
+  diagnostics?: DispatchDiagnostics
   charge_window: Window
   discharge_window: Window
   spread_after_efficiency: number
@@ -174,6 +204,7 @@ export interface ScheduleResponse {
 export interface ScenarioRequest {
   date: string
   profile_name: RiskAppetite | string
+  optimizer_mode?: OptimizerMode
   prices: number[]
   temperatures?: number[] | null
   round_trip_efficiency?: number | null
@@ -197,6 +228,7 @@ export interface ScenarioRequest {
 export interface BacktestRequest {
   date: string
   profile_name: RiskAppetite | string
+  optimizer_mode?: OptimizerMode
   lookback_days?: number
   forecast_method?: 'lookback_average' | string
   market_volatility?: MarketVolatility | string
@@ -235,6 +267,7 @@ export type BacktestResult = BacktestResponse
 export interface BackendScheduleRequest {
   date: string
   profile_name?: RiskAppetite | string
+  optimizer_mode?: OptimizerMode
   prices: number[]
   temperatures?: number[] | null
   forecast_confidence?: Confidence | string
@@ -253,6 +286,7 @@ export interface BackendScheduleRequest {
 export interface BackendScenarioRequest {
   date: string
   profile_name?: RiskAppetite | string
+  optimizer_mode?: OptimizerMode
   prices: number[]
   temperatures?: number[] | null
   round_trip_efficiency?: number | null
@@ -271,6 +305,7 @@ export interface BackendScenarioRequest {
 export interface BackendBacktestRequest {
   date: string
   profile_name?: RiskAppetite | string
+  optimizer_mode?: OptimizerMode
   lookback_days?: number
   forecast_method?: 'lookback_average' | string
   market_volatility?: MarketVolatility | string
@@ -334,6 +369,8 @@ export interface BackendScheduleResponse {
   date: string
   decision: string
   confidence: string
+  optimizer?: OptimizerMetadata
+  diagnostics?: DispatchDiagnostics
   charge_window: Window
   discharge_window: Window
   spread_after_efficiency: number

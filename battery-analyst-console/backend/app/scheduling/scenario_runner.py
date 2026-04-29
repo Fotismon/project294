@@ -26,7 +26,16 @@ from app.scheduling.dispatch import (
     select_profitable_dispatch_windows,
 )
 from app.scheduling.economics import filter_economic_schedules
-from app.scheduling.optimizer_metadata import optimizer_metadata_for_request
+from app.scheduling.milp import (
+    DEFAULT_INTERVALS_PER_DAY,
+    MilpDispatchResult,
+    solve_milp_dispatch,
+)
+from app.scheduling.milp_response import convert_milp_result_to_schedule_response
+from app.scheduling.optimizer_metadata import (
+    build_optimizer_metadata,
+    optimizer_metadata_for_request,
+)
 from app.scheduling.pairing import pair_charge_discharge_windows
 from app.scheduling.profitability import build_hurdle_explanation_lines
 from app.scheduling.recommendation import (
@@ -40,6 +49,7 @@ from app.scheduling.windows import generate_rolling_windows
 
 ALLOWED_TEMPERATURE_POLICIES = {"relaxed", "normal", "strict"}
 ALLOWED_RISK_APPETITES = {"conservative", "balanced", "aggressive"}
+VALID_OPTIMIZER_MODES = {"window_v1", "milp", "auto"}
 
 
 def apply_scenario_overrides(
@@ -93,10 +103,73 @@ def scenario_minimum_margin(base_margin: float, risk_appetite: str) -> float:
 
 
 def run_scenario_analysis(request: ScenarioOverrideRequest) -> ScheduleResponse:
-    """Run the MVP scenario analysis pipeline and return a ScheduleResponse."""
+    validate_optimizer_mode(request.optimizer_mode)
 
     base_profile = get_battery_profile(request.profile_name)
     profile = apply_scenario_overrides(base_profile, request)
+
+    if request.optimizer_mode == "window_v1":
+        return run_window_scenario_analysis(request, profile)
+
+    if request.optimizer_mode == "milp":
+        try:
+            return run_milp_scenario_analysis(request, profile, requested_mode="milp")
+        except Exception as error:
+            failed_result = build_failed_milp_result(
+                solver_status="error",
+                error_message=f"MILP failed: {error}.",
+            )
+            response = convert_milp_result_to_schedule_response(
+                result=failed_result,
+                prices=request.prices,
+                profile=profile,
+                date=request.date,
+                requested_mode="milp",
+            )
+            return add_scenario_metadata_to_response(
+                response=response,
+                request=request,
+                effective_margin=None,
+            )
+
+    try:
+        milp_response = run_milp_scenario_analysis(
+            request,
+            profile,
+            requested_mode="auto",
+        )
+    except Exception as error:
+        return run_window_scenario_fallback(
+            request=request,
+            profile=profile,
+            fallback_reason=f"MILP failed: {error}. Used window_v1 scheduler.",
+            solver_status="error",
+        )
+
+    if milp_response.optimizer.is_optimal:
+        return milp_response
+
+    fallback_reason = (
+        milp_response.optimizer.fallback_reason
+        or "MILP did not return an optimal dispatch. Used window_v1 scheduler."
+    )
+    return run_window_scenario_fallback(
+        request=request,
+        profile=profile,
+        fallback_reason=fallback_reason,
+        solver_status=milp_response.optimizer.solver_status,
+    )
+
+
+def run_window_scenario_analysis(
+    request: ScenarioOverrideRequest,
+    profile: BatteryOperatingProfile | None = None,
+) -> ScheduleResponse:
+    """Run the MVP scenario analysis pipeline and return a ScheduleResponse."""
+
+    if profile is None:
+        base_profile = get_battery_profile(request.profile_name)
+        profile = apply_scenario_overrides(base_profile, request)
 
     # This endpoint uses the real internal scheduling pipeline for scenario analysis.
     # It is still an MVP and uses simplified expected value and feasibility calculations.
@@ -145,6 +218,107 @@ def run_scenario_analysis(request: ScenarioOverrideRequest) -> ScheduleResponse:
         profile=profile,
         effective_margin=effective_margin,
         dispatch_explanation=v12_explanation if v12_discharge_windows else [],
+    )
+
+
+def run_milp_scenario_analysis(
+    request: ScenarioOverrideRequest,
+    profile: BatteryOperatingProfile,
+    requested_mode: str,
+) -> ScheduleResponse:
+    result = solve_milp_dispatch(
+        prices=request.prices,
+        profile=profile,
+        temperatures=request.temperatures,
+    )
+    response = convert_milp_result_to_schedule_response(
+        result=result,
+        prices=request.prices,
+        profile=profile,
+        date=request.date,
+        requested_mode=requested_mode,
+    )
+    effective_margin = scenario_minimum_margin(
+        request.minimum_margin_eur_per_mwh,
+        request.risk_appetite,
+    )
+    return add_scenario_metadata_to_response(
+        response=response,
+        request=request,
+        effective_margin=effective_margin,
+    )
+
+
+def run_window_scenario_fallback(
+    request: ScenarioOverrideRequest,
+    profile: BatteryOperatingProfile,
+    fallback_reason: str,
+    solver_status: str | None,
+) -> ScheduleResponse:
+    response = run_window_scenario_analysis(request, profile)
+    return response.model_copy(
+        update={
+            "optimizer": build_optimizer_metadata(
+                requested_mode="auto",
+                used_mode="window_v1",
+                fallback_used=True,
+                fallback_reason=fallback_reason,
+                model_version="window_v1.2",
+                is_optimal=False,
+                solver_status=solver_status,
+            )
+        }
+    )
+
+
+def add_scenario_metadata_to_response(
+    response: ScheduleResponse,
+    request: ScenarioOverrideRequest,
+    effective_margin: float | None,
+) -> ScheduleResponse:
+    metadata_alerts = [
+        Alert(level="info", message=note, metric="scenario")
+        for note in scenario_notes(request, effective_margin)
+    ]
+    return response.model_copy(
+        update={
+            "alerts": deduplicate_schedule_alerts(response.alerts + metadata_alerts),
+            "explanation": response.explanation
+            + [
+                (
+                    f"Scenario used profile '{request.profile_name}' with risk appetite "
+                    f"'{request.risk_appetite}'."
+                )
+            ],
+        }
+    )
+
+
+def validate_optimizer_mode(mode: str) -> None:
+    if mode not in VALID_OPTIMIZER_MODES:
+        allowed_modes = ", ".join(sorted(VALID_OPTIMIZER_MODES))
+        raise ValueError(
+            f"Invalid optimizer_mode '{mode}'. Allowed values: {allowed_modes}."
+        )
+
+
+def build_failed_milp_result(
+    solver_status: str,
+    error_message: str,
+) -> MilpDispatchResult:
+    zero_dispatch = [0.0] * DEFAULT_INTERVALS_PER_DAY
+    return MilpDispatchResult(
+        feasible=False,
+        solver_status=solver_status,
+        objective_value=None,
+        charge_power_mw=zero_dispatch,
+        discharge_power_mw=zero_dispatch,
+        net_power_mw=zero_dispatch,
+        soc_trajectory=[],
+        energy_trajectory_mwh=[],
+        diagnostics=None,
+        error_message=error_message,
+        explanation=[error_message],
     )
 
 
