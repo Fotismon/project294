@@ -13,3 +13,6 @@ cd /Users/project294/battery-analyst-console/frontend
 npm install
 npm run dev
 npm run build
+
+Demo script:
+See frontend/DEMO.md for the hackathon presentation flow.
