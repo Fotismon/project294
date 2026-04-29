@@ -34,6 +34,18 @@ class SoCFeasibilityResult(BaseModel):
     end_soc: float = Field(..., description="Final SoC after all intervals.")
     min_soc_reached: float = Field(..., description="Minimum SoC reached in the trajectory.")
     max_soc_reached: float = Field(..., description="Maximum SoC reached in the trajectory.")
+    total_mwh_charged: float = Field(
+        ...,
+        description="Raw scheduled charged energy in MWh.",
+    )
+    total_mwh_discharged: float = Field(
+        ...,
+        description="Raw scheduled discharged energy in MWh.",
+    )
+    equivalent_full_cycles: float = Field(
+        ...,
+        description="Equivalent full cycles based on discharged energy and nominal capacity.",
+    )
     trajectory: list[float] = Field(..., description="SoC trajectory including initial value.")
     violations: list[SoCViolation] = Field(
         default_factory=list,
@@ -137,6 +149,45 @@ def build_power_vectors(
     return charge_power_mw, discharge_power_mw
 
 
+def calculate_energy_throughput(
+    charge_power_mw: list[float],
+    discharge_power_mw: list[float],
+    interval_minutes: int = DEFAULT_INTERVAL_MINUTES,
+) -> tuple[float, float]:
+    """Calculate raw AC-side charged and discharged energy throughput in MWh."""
+
+    if len(charge_power_mw) != len(discharge_power_mw):
+        raise ValueError("charge and discharge power vectors must have the same length.")
+
+    if interval_minutes <= 0:
+        raise ValueError("interval_minutes must be positive.")
+
+    delta_hours = interval_minutes / 60
+    total_mwh_charged = sum(charge_power_mw) * delta_hours
+    total_mwh_discharged = sum(discharge_power_mw) * delta_hours
+    return round(total_mwh_charged, 4), round(total_mwh_discharged, 4)
+
+
+def calculate_equivalent_full_cycles(
+    total_mwh_discharged: float,
+    capacity_mwh: float,
+) -> float:
+    """Calculate equivalent full cycles from discharged energy and capacity.
+
+    Example:
+        # Balanced profile: 100 MW, 300 MWh, one 1-hour discharge window.
+        calculate_equivalent_full_cycles(100.0, 300.0)  # 0.3333
+    """
+
+    if capacity_mwh <= 0:
+        raise ValueError("capacity_mwh must be greater than 0.")
+
+    if total_mwh_discharged < 0:
+        raise ValueError("total_mwh_discharged must be greater than or equal to 0.")
+
+    return round(total_mwh_discharged / capacity_mwh, 4)
+
+
 def track_soc_feasibility(
     physical_result: PhysicalConstraintResult,
     profile: BatteryOperatingProfile,
@@ -161,6 +212,15 @@ def track_soc_feasibility(
         discharge_end_index=discharge_end_index,
         power_mw=profile.power_mw,
         intervals_per_day=intervals_per_day,
+    )
+    total_mwh_charged, total_mwh_discharged = calculate_energy_throughput(
+        charge_power_mw=charge_power_mw,
+        discharge_power_mw=discharge_power_mw,
+        interval_minutes=interval_minutes,
+    )
+    equivalent_full_cycles = calculate_equivalent_full_cycles(
+        total_mwh_discharged=total_mwh_discharged,
+        capacity_mwh=profile.capacity_mwh,
     )
     charge_efficiency, discharge_efficiency = derive_charge_discharge_efficiencies(
         profile.round_trip_efficiency
@@ -210,6 +270,9 @@ def track_soc_feasibility(
         end_soc=trajectory[-1],
         min_soc_reached=min(trajectory),
         max_soc_reached=max(trajectory),
+        total_mwh_charged=total_mwh_charged,
+        total_mwh_discharged=total_mwh_discharged,
+        equivalent_full_cycles=equivalent_full_cycles,
         trajectory=trajectory,
         violations=violations,
     )
