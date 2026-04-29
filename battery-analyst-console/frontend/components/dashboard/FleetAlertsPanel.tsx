@@ -109,18 +109,52 @@ export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
   const offlineAssets = assets.filter((asset) => asset.status === 'offline').length
   const limitedAssets = assets.filter((asset) => asset.status === 'limited').length
 
-  if (alerts.length === 0 && assetWarnings.length === 0) {
+  if (alerts.length === 0) {
     return (
-      <SectionPanel
-        title="Operational Risk Center"
-        subtitle="Alerts reflect the latest schedule or scenario result."
-      >
-        <EmptyState
-          title="No active alerts"
-          message="No operational alerts were returned by the latest schedule or scenario."
-        />
-        <p className="mt-3 text-center text-xs text-text-muted">Run a scenario to refresh operational risk signals.</p>
-      </SectionPanel>
+      <div className="space-y-6">
+        <SectionPanel
+          title="Operational Risk Center"
+          subtitle="Alerts reflect the latest schedule or scenario result."
+        >
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MetricCard label="Critical" value={0} />
+            <MetricCard label="Warning" value={0} />
+            <MetricCard label="Info" value={0} />
+            <MetricCard label="Total alerts" value={0} helperText="Latest schedule/scenario" />
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <AssetContext label="Assets monitored" value={assets.length} />
+            <AssetContext label="Offline assets" value={offlineAssets} tone={offlineAssets > 0 ? 'critical' : 'positive'} />
+            <AssetContext label="Limited assets" value={limitedAssets} tone={limitedAssets > 0 ? 'warning' : 'positive'} />
+          </div>
+          <EmptyState
+            title="No active alerts"
+            message="No active alerts from the latest schedule or scenario."
+            className="mt-4"
+          />
+          <p className="mt-3 text-center text-xs text-text-muted">
+            Run a scenario or refresh the schedule to update operational risk signals.
+          </p>
+        </SectionPanel>
+
+        {assetWarnings.length > 0 && (
+          <SectionPanel
+            title="Asset warnings"
+            subtitle="Asset-level context from current fleet status and operator selections."
+            action={<StatusBadge label={`${assetWarnings.length}`} tone="warning" />}
+          >
+            <div className="space-y-3">
+              {assetWarnings.map((alert, index) => (
+                <AlertCard
+                  key={`asset-${alert.severity}-${alert.title}-${index}`}
+                  alert={alert}
+                  relatedMetric={inferRelatedMetric(alert)}
+                />
+              ))}
+            </div>
+          </SectionPanel>
+        )}
+      </div>
     )
   }
 
@@ -143,13 +177,7 @@ export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
         </div>
       </SectionPanel>
 
-      {alerts.length === 0 ? (
-        <EmptyState
-          title="No schedule or scenario alerts"
-          message="No operational alerts were returned by the latest schedule or scenario."
-        />
-      ) : (
-        severityOrder.map((severity) => {
+      {severityOrder.map((severity) => {
           const severityAlerts = grouped[severity]
           if (severityAlerts.length === 0) return null
 
@@ -171,8 +199,7 @@ export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
               </div>
             </SectionPanel>
           )
-        })
-      )}
+        })}
 
       {assetWarnings.length > 0 && (
         <SectionPanel
