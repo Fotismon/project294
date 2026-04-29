@@ -15,6 +15,14 @@ export type DataQualityLevel = 'low' | 'medium' | 'high'
 export type BatteryAction = 'auto' | 'charge' | 'discharge' | 'idle'
 export type EffectiveBatteryAction = Exclude<BatteryAction, 'auto'>
 export type FleetForecastAction = EffectiveBatteryAction | 'mixed'
+export type ApiStatusKind = 'connected' | 'mock' | 'error' | 'loading'
+
+export interface ApiStatus {
+  kind: ApiStatusKind
+  message: string
+  detail?: string
+  last_updated_at?: string
+}
 
 export interface BatteryProfile {
   battery_id: string

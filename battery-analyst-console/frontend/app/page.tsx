@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+import { ApiStatusBanner } from '@/components/dashboard/ApiStatusBanner'
 import { AlertCard } from '@/components/dashboard/AlertCard'
 import { BacktestPanel } from '@/components/dashboard/BacktestPanel'
 import { BatteryStressCard } from '@/components/dashboard/BatteryStressCard'
@@ -13,11 +14,12 @@ import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
 import { RecommendationSection } from '@/components/dashboard/RecommendationSection'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { TabId, TabNav } from '@/components/dashboard/TabNav'
-import { getForecast, getSchedule, isUsingMockData, runBacktest, runScenario } from '@/lib/api'
+import { clearApiFallback, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, isUsingMockData, runBacktest, runScenario } from '@/lib/api'
 import { mockAlerts, mockFleetAssets, mockForecastData, mockScheduleResponse } from '@/lib/mock-data'
 import { buildDefaultSchedulerInput } from '@/lib/sample-inputs'
 import {
   Alert,
+  ApiStatus,
   BacktestResponse,
   BatteryAction,
   BatteryAsset,
@@ -30,6 +32,18 @@ import {
   ScheduleResponse,
   TemperaturePolicy
 } from '@/types/api'
+
+function currentStatusTime(): string {
+  return new Date().toLocaleTimeString()
+}
+
+function backtestFallbackDetail(message: string): string {
+  const lower = message.toLowerCase()
+  if (lower.includes('historical') || lower.includes('csv') || lower.includes('market_prices') || lower.includes('no data')) {
+    return 'Historical market data is unavailable for this date.'
+  }
+  return message
+}
 
 function formatDate(dateStr: string): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -123,6 +137,10 @@ export default function Home() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [apiStatus, setApiStatus] = useState<ApiStatus>({
+    kind: 'loading',
+    message: 'Loading backend data...'
+  })
 
   const [roundTripEfficiency, setRoundTripEfficiency] = useState(90)
   const [batteryDuration, setBatteryDuration] = useState(2)
@@ -151,6 +169,11 @@ export default function Home() {
     async function loadDashboard() {
       setIsLoading(true)
       setError(null)
+      setApiStatus({
+        kind: 'loading',
+        message: 'Loading backend data...'
+      })
+      clearApiFallback()
       try {
         const [schedule, forecast] = await Promise.all([
           getSchedule(mockScheduleResponse.date, 'balanced'),
@@ -160,12 +183,41 @@ export default function Home() {
         setScheduleData(schedule)
         setForecastData(forecast)
         setAlerts(scheduleAlertsOrFallback(schedule, mockAlerts))
-      } catch {
+        const fallback = getLastApiFallback()
+        if (!hasConfiguredApiBaseUrl()) {
+          setApiStatus({
+            kind: 'mock',
+            message: 'Using mock fallback',
+            detail: 'NEXT_PUBLIC_API_BASE_URL is not configured.'
+          })
+        } else if (fallback) {
+          setApiStatus({
+            kind: 'error',
+            message: 'API error - using mock fallback',
+            detail: fallback.message,
+            last_updated_at: currentStatusTime()
+          })
+        } else {
+          setApiStatus({
+            kind: 'connected',
+            message: 'Backend connected',
+            detail: 'Using live schedule and forecast responses.',
+            last_updated_at: currentStatusTime()
+          })
+        }
+      } catch (loadError) {
         if (!mounted) return
+        const detail = loadError instanceof Error ? loadError.message : String(loadError)
         setError('Unable to load live API data. Showing local mock data.')
         setScheduleData(mockScheduleResponse)
         setForecastData(mockForecastData)
         setAlerts(scheduleAlertsOrFallback(mockScheduleResponse, mockAlerts))
+        setApiStatus({
+          kind: 'error',
+          message: 'API error - using mock fallback',
+          detail,
+          last_updated_at: currentStatusTime()
+        })
       } finally {
         if (mounted) setIsLoading(false)
       }
@@ -192,6 +244,12 @@ export default function Home() {
   async function handleRunScenario() {
     setIsScenarioRunning(true)
     setError(null)
+    setApiStatus({
+      kind: 'loading',
+      message: 'Running scenario...',
+      detail: 'Calling /scenario with current assumptions.'
+    })
+    clearApiFallback()
     try {
       const schedulerInput = buildDefaultSchedulerInput()
       const result = await runScenario(
@@ -216,8 +274,37 @@ export default function Home() {
       )
       setScheduleData(result)
       setAlerts(scheduleAlertsOrFallback(result))
-    } catch {
+      const fallback = getLastApiFallback()
+      if (!hasConfiguredApiBaseUrl()) {
+        setApiStatus({
+          kind: 'mock',
+          message: 'Using mock fallback',
+          detail: 'NEXT_PUBLIC_API_BASE_URL is not configured.'
+        })
+      } else if (fallback) {
+        setApiStatus({
+          kind: 'error',
+          message: 'Scenario API error - using mock fallback',
+          detail: fallback.message,
+          last_updated_at: currentStatusTime()
+        })
+      } else {
+        setApiStatus({
+          kind: 'connected',
+          message: 'Backend connected',
+          detail: 'Scenario result returned from /scenario.',
+          last_updated_at: currentStatusTime()
+        })
+      }
+    } catch (scenarioError) {
+      const detail = scenarioError instanceof Error ? scenarioError.message : String(scenarioError)
       setError('Scenario API failed. Local mock scenario is still available.')
+      setApiStatus({
+        kind: 'error',
+        message: 'Scenario API error - using mock fallback',
+        detail,
+        last_updated_at: currentStatusTime()
+      })
     } finally {
       setIsScenarioRunning(false)
     }
@@ -226,6 +313,12 @@ export default function Home() {
   async function handleRunBacktest() {
     setIsBacktestRunning(true)
     setError(null)
+    setApiStatus({
+      kind: 'loading',
+      message: 'Running backtest...',
+      detail: 'Calling /backtest.'
+    })
+    clearApiFallback()
     try {
       const result = await runBacktest({
         date: backtestDate,
@@ -237,8 +330,38 @@ export default function Home() {
         minimum_margin_eur_per_mwh: 2
       })
       setBacktestResult(result)
-    } catch {
+      const fallback = getLastApiFallback()
+      if (!hasConfiguredApiBaseUrl()) {
+        setApiStatus({
+          kind: 'mock',
+          message: 'Using mock fallback',
+          detail: 'NEXT_PUBLIC_API_BASE_URL is not configured.'
+        })
+      } else if (fallback) {
+        setError('Backtest data unavailable. Showing mock backtest result.')
+        setApiStatus({
+          kind: 'error',
+          message: 'Backtest API error - using mock fallback',
+          detail: backtestFallbackDetail(fallback.message),
+          last_updated_at: currentStatusTime()
+        })
+      } else {
+        setApiStatus({
+          kind: 'connected',
+          message: 'Backend connected',
+          detail: 'Backtest result returned from /backtest.',
+          last_updated_at: currentStatusTime()
+        })
+      }
+    } catch (backtestError) {
+      const detail = backtestError instanceof Error ? backtestError.message : String(backtestError)
       setError('Backtest data unavailable. Showing mock backtest result.')
+      setApiStatus({
+        kind: 'error',
+        message: 'Backtest API error - using mock fallback',
+        detail: backtestFallbackDetail(detail),
+        last_updated_at: currentStatusTime()
+      })
     } finally {
       setIsBacktestRunning(false)
     }
@@ -256,6 +379,8 @@ export default function Home() {
           <span className="rounded-lg border border-border bg-surface-elevated px-3 py-1 text-sm text-text-secondary">{isUsingMockData() ? 'Mock data' : 'API first'}</span>
         </div>
       </header>
+
+      <ApiStatusBanner status={apiStatus} />
 
       <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
 

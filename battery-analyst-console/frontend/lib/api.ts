@@ -39,6 +39,52 @@ import { buildDefaultSchedulerInput } from './sample-inputs'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ''
 
+interface ApiFallbackInfo {
+  path: string
+  message: string
+  at: string
+}
+
+let lastApiFallback: ApiFallbackInfo | null = null
+
+function readableError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function recordApiFallback(path: string, error: unknown): void {
+  lastApiFallback = {
+    path,
+    message: readableError(error),
+    at: new Date().toISOString()
+  }
+}
+
+function compactApiDetail(payload: unknown): string {
+  if (typeof payload === 'string') return payload
+  if (!payload || typeof payload !== 'object') return ''
+
+  const record = payload as Record<string, unknown>
+  const detail = record.detail
+
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return String(entry)
+        const item = entry as Record<string, unknown>
+        const location = Array.isArray(item.loc) ? item.loc.join('.') : ''
+        const message = typeof item.msg === 'string' ? item.msg : JSON.stringify(item)
+        return location ? `${location}: ${message}` : message
+      })
+      .join('; ')
+  }
+
+  const message = record.message
+  if (typeof message === 'string') return message
+
+  return JSON.stringify(payload)
+}
+
 function effectiveFleetAction(asset: BatteryAsset): Exclude<BatteryAction, 'auto'> {
   return asset.selected_action === 'auto' ? asset.auto_action : asset.selected_action
 }
@@ -71,7 +117,17 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   })
 
   if (!response.ok) {
-    throw new Error(`API error ${response.status} for ${path}`)
+    let detail = ''
+    try {
+      const contentType = response.headers.get('content-type') ?? ''
+      detail = contentType.includes('application/json')
+        ? compactApiDetail(await response.json())
+        : await response.text()
+    } catch {
+      detail = ''
+    }
+
+    throw new Error(`API error ${response.status} for ${path}${detail ? `: ${detail}` : ''}`)
   }
 
   return response.json() as Promise<T>
@@ -315,6 +371,7 @@ export async function getForecast(date: string): Promise<ForecastPoint[]> {
     return mapForecast(await fetchJson<BackendForecastResponse>('/forecast'))
   } catch (error) {
     console.warn('Forecast API unavailable, falling back to mock data:', error)
+    recordApiFallback('/forecast', error)
     return mockForecastData
   }
 }
@@ -329,6 +386,7 @@ export async function getSchedule(date: string, batteryProfile?: RiskAppetite | 
     }))
   } catch (error) {
     console.warn('Schedule API unavailable, falling back to mock data:', error)
+    recordApiFallback('/schedule', error)
     return mockScheduleResponse
   }
 }
@@ -353,6 +411,7 @@ export async function runScenario(payload: ScenarioRequest, baseline: ScheduleRe
     return mapSchedule(scenario)
   } catch (error) {
     console.warn('Scenario API unavailable, falling back to mock data:', error)
+    recordApiFallback('/scenario', error)
     return getScenarioModifiedResponse(
       scenarioEfficiencyPercent(payload.round_trip_efficiency),
       payload.duration_hours ?? payload.battery_duration_hours ?? 2,
@@ -376,6 +435,7 @@ export async function runBacktest(payload: BacktestRequest): Promise<BacktestRes
     )
   } catch (error) {
     console.warn('Backtest API unavailable, falling back to mock data:', error)
+    recordApiFallback('/backtest', error)
     return {
       ...mockBacktestResult,
       warnings: ['Backtest data unavailable. Showing mock backtest result.', ...mockBacktestResult.warnings]
@@ -398,6 +458,7 @@ export async function getFleet(): Promise<FleetResponse> {
     return await fetchJson<FleetResponse>('/fleet')
   } catch (error) {
     console.warn('Fleet API unavailable, falling back to mock data:', error)
+    recordApiFallback('/fleet', error)
     return { assets: mockFleetAssets, summary: mapFleetSummary(mockFleetAssets) }
   }
 }
@@ -421,6 +482,7 @@ export async function getFleetRecommendation(payload: FleetRecommendationRequest
     })
   } catch (error) {
     console.warn('Fleet recommendation API unavailable, falling back to local summary:', error)
+    recordApiFallback('/fleet/recommendation', error)
     return {
       summary: fallbackSummary,
       manual_override_count: payload.assets.filter((asset) => asset.selected_action !== 'auto').length,
@@ -440,6 +502,7 @@ export async function patchFleetAssetAction(id: string, payload: PatchBatteryAct
     })
   } catch (error) {
     console.warn('Fleet asset action API unavailable, keeping local override:', error)
+    recordApiFallback(`/fleet/assets/${id}/action`, error)
     return null
   }
 }
@@ -454,10 +517,23 @@ export async function runFleetBulkAction(payload: FleetBulkActionRequest): Promi
     })
   } catch (error) {
     console.warn('Fleet bulk action API unavailable, keeping local overrides:', error)
+    recordApiFallback('/fleet/bulk-action', error)
     return null
   }
 }
 
 export function isUsingMockData(): boolean {
   return !API_BASE_URL
+}
+
+export function hasConfiguredApiBaseUrl(): boolean {
+  return Boolean(API_BASE_URL)
+}
+
+export function clearApiFallback(): void {
+  lastApiFallback = null
+}
+
+export function getLastApiFallback(): ApiFallbackInfo | null {
+  return lastApiFallback
 }
