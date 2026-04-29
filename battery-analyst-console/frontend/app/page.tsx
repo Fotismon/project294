@@ -8,10 +8,9 @@ import { BatteryStressCard } from '@/components/dashboard/BatteryStressCard'
 import { ConstraintPanel } from '@/components/dashboard/ConstraintPanel'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { FleetAlertsPanel } from '@/components/dashboard/FleetAlertsPanel'
+import { FleetOverview } from '@/components/dashboard/FleetOverview'
 import { FleetManagerSection } from '@/components/dashboard/FleetManagerSection'
-import { MarketForecastSection } from '@/components/dashboard/MarketForecastSection'
 import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
-import { RecommendationSection } from '@/components/dashboard/RecommendationSection'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { ConsoleSectionId } from '@/components/dashboard/SideNav'
 import { clearApiFallback, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, runBacktest, runScenario } from '@/lib/api'
@@ -385,21 +384,20 @@ export default function Home() {
 
       <div>
         {activeSection === 'fleet' && (
-          <div className="space-y-8">
-            <SectionHeader title="Fleet Overview" subtitle={`${formatDate(scheduleData.date)} · Europe/Athens operating day`} />
-            <MarketForecastSection forecastData={forecastData} schedule={scheduleData} currentSignal={fleetSummary.forecast_driven_action} />
-            <FleetManagerSection
-              assets={fleetAssets}
-              summary={fleetSummary}
-              selectedIds={selectedAssetIds}
-              onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
-              onClearSelection={() => setSelectedAssetIds([])}
-              onToggleSelected={handleToggleSelected}
-              onApplyAction={handleApplyBulkAction}
-              onAssetActionChange={handleAssetActionChange}
-            />
-            <RecommendationSection schedule={scheduleData} fleetRecommendation={fleetRecommendation} />
-          </div>
+          <FleetOverview
+            schedule={scheduleData}
+            forecastData={forecastData}
+            fleetAssets={fleetAssets}
+            alerts={alerts}
+            fleetSummary={fleetSummary}
+            fleetRecommendation={fleetRecommendation}
+            selectedAssetIds={selectedAssetIds}
+            onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
+            onClearSelection={() => setSelectedAssetIds([])}
+            onToggleSelected={handleToggleSelected}
+            onApplyAction={handleApplyBulkAction}
+            onAssetActionChange={handleAssetActionChange}
+          />
         )}
 
         {activeSection === 'assets' && (

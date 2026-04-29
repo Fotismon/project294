@@ -3,7 +3,7 @@ import { BadgeTone } from './StatusBadge'
 
 interface MetricCardProps {
   label: string
-  value: string | number
+  value: React.ReactNode
   helperText?: string
   trend?: string
   tone?: BadgeTone
