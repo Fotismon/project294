@@ -13,6 +13,7 @@ import {
   YAxis
 } from 'recharts'
 import { ForecastPoint } from '@/types/api'
+import { EmptyState } from '@/components/ui'
 
 interface ForecastChartProps {
   data: ForecastPoint[]
@@ -35,6 +36,14 @@ function timestampForWindow(data: ForecastPoint[], time: string): string {
 }
 
 export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastChartProps) {
+  if (data.length === 0) {
+    return (
+      <div className="h-[400px] w-full">
+        <EmptyState title="No forecast data" message="Forecast data is unavailable." className="flex h-full flex-col items-center justify-center" />
+      </div>
+    )
+  }
+
   const chartData = data
     .filter((point) => {
       const hour = new Date(point.timestamp).getHours()

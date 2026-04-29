@@ -1,9 +1,9 @@
 'use client'
 
 import React from 'react'
-import { ForecastPoint, ScheduleResponse } from '@/types/api'
+import { ForecastPoint, ScheduleResponse, Window } from '@/types/api'
+import { ConfidenceBadge, DecisionBadge, MetricCard, SectionPanel, StatusBadge } from '@/components/ui'
 import { ForecastChart } from './ForecastChart'
-import { MetricCard } from './MetricCard'
 
 interface MarketForecastSectionProps {
   forecastData: ForecastPoint[]
@@ -11,47 +11,134 @@ interface MarketForecastSectionProps {
   currentSignal: 'charge' | 'discharge' | 'idle' | 'mixed'
 }
 
-export function MarketForecastSection({ forecastData, schedule, currentSignal }: MarketForecastSectionProps) {
-  const hasTradeWindows = schedule.charge_window.start !== schedule.charge_window.end && schedule.discharge_window.start !== schedule.discharge_window.end
+function formatEuro(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+    style: 'currency',
+    currency: 'EUR'
+  }).format(value)
+}
+
+function formatEuroRange(range: [number, number] | number[]): string {
+  const low = range[0] ?? 0
+  const high = range[1] ?? low
+  return `${formatEuro(low)}-${formatEuro(high)}`
+}
+
+function formatSpread(value: number): string {
+  return `${value.toFixed(1)} EUR/MWh`
+}
+
+function formatPrice(value: number): string {
+  return `${value.toFixed(1)} EUR/MWh`
+}
+
+function isExecutableWindow(window: Window | null | undefined): window is Window {
+  return Boolean(window && window.start !== window.end && window.start !== '00:00' && window.end !== '00:00')
+}
+
+function signalTone(signal: MarketForecastSectionProps['currentSignal']): 'positive' | 'warning' | 'info' | 'neutral' {
+  if (signal === 'charge') return 'positive'
+  if (signal === 'discharge') return 'info'
+  if (signal === 'mixed') return 'warning'
+  return 'neutral'
+}
+
+function signalLabel(signal: MarketForecastSectionProps['currentSignal']): string {
+  return signal.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function operatingReason(schedule: ScheduleResponse, hasTradeWindows: boolean): string {
+  if (hasTradeWindows) {
+    return `Charge during ${schedule.charge_window.start}-${schedule.charge_window.end}, then discharge during ${schedule.discharge_window.start}-${schedule.discharge_window.end} if asset constraints remain acceptable.`
+  }
+
+  return schedule.explanation[0] ?? schedule.alerts[0]?.message ?? 'No executable charge/discharge window is currently recommended.'
+}
+
+function WindowSummary({ label, window, tone }: { label: string; window: Window; tone: 'positive' | 'info' }) {
+  const executable = isExecutableWindow(window)
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
-        <div>
-          <h2 className="text-xl font-semibold text-text-primary">Market Forecast</h2>
-          <p className="mt-1 text-sm text-text-secondary">Forecast signal drives the automatic fleet recommendation.</p>
+    <div className="border border-border bg-surface px-3 py-2">
+      <p className="text-xs uppercase tracking-wider text-text-muted">{label}</p>
+      {executable ? (
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-text-primary">{window.start}-{window.end}</span>
+          <StatusBadge label={formatPrice(window.avg_price)} tone={tone} />
         </div>
-        <div className="text-xs text-text-muted">
-          Flow: Market Forecast → Fleet Manager → Battery Asset → Recommendation
+      ) : (
+        <p className="mt-1 text-sm text-text-secondary">No executable window</p>
+      )}
+    </div>
+  )
+}
+
+function LegendItem({ label, className }: { label: string; className: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`h-2 w-4 ${className}`} />
+      {label}
+    </span>
+  )
+}
+
+export function MarketForecastSection({ forecastData, schedule, currentSignal }: MarketForecastSectionProps) {
+  const hasChargeWindow = isExecutableWindow(schedule.charge_window)
+  const hasDischargeWindow = isExecutableWindow(schedule.discharge_window)
+  const hasTradeWindows = hasChargeWindow && hasDischargeWindow
+
+  return (
+    <SectionPanel
+      title="Market Forecast"
+      subtitle="96-interval day-ahead price signal with recommended charge and discharge windows."
+      action={<StatusBadge label="Resolution: 15 minutes · Horizon: 24 hours" tone="neutral" />}
+    >
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <MetricCard label="Decision" value={<DecisionBadge decision={schedule.decision} size="md" />} />
+          <MetricCard label="Confidence" value={<ConfidenceBadge confidence={schedule.confidence} size="md" />} />
+          <MetricCard label="Spread after efficiency" value={formatSpread(schedule.spread_after_efficiency)} tone="info" />
+          <MetricCard label="Expected value" value={formatEuroRange(schedule.expected_value_range_eur)} tone="positive" />
+          <MetricCard label="Market signal" value={signalLabel(currentSignal)} tone={signalTone(currentSignal)} />
         </div>
-      </div>
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_320px]">
-        <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-xs uppercase tracking-wider text-text-secondary">Price Forecast</h3>
-            <div className="flex gap-3 text-xs text-text-muted">
-              <span>Low-price charge window</span>
-              <span>High-price discharge window</span>
-              <span>Idle/no-go periods</span>
+
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <WindowSummary label="Charge window" window={schedule.charge_window} tone="positive" />
+          <WindowSummary label="Discharge window" window={schedule.discharge_window} tone="info" />
+        </div>
+
+        {!hasTradeWindows && (
+          <div className="border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-text-primary">
+            No executable charge/discharge window. <span className="text-text-secondary">{operatingReason(schedule, false)}</span>
+          </div>
+        )}
+
+        <div className="border border-border bg-surface p-4">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">Day-ahead price curve</h3>
+              <p className="mt-1 text-xs text-text-secondary">96 x 15-min intervals across the operating day.</p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs text-text-muted">
+              <LegendItem label="Forecast price" className="bg-info" />
+              <LegendItem label="Charge window" className="bg-success/70" />
+              <LegendItem label="Discharge window" className="bg-error/70" />
+              <LegendItem label="No-action / idle" className="bg-text-muted" />
             </div>
           </div>
-          <ForecastChart data={forecastData} chargeWindow={schedule.charge_window} dischargeWindow={schedule.discharge_window} />
+          <ForecastChart
+            data={forecastData}
+            chargeWindow={hasChargeWindow ? schedule.charge_window : undefined}
+            dischargeWindow={hasDischargeWindow ? schedule.discharge_window : undefined}
+          />
         </div>
-        <div className="space-y-3">
-          <MetricCard label="Market Signal" value={currentSignal.toUpperCase()} variant={currentSignal === 'charge' ? 'success' : currentSignal === 'discharge' ? 'info' : 'warning'} />
-          <MetricCard label="Confidence" value={schedule.confidence.replace(/_/g, ' ')} />
-          <MetricCard label="Spread After RTE" value={schedule.spread_after_efficiency.toFixed(1)} unit="€/MWh" />
-          <MetricCard label="Expected Value" value={`€${schedule.expected_value_range_eur[0]}-€${schedule.expected_value_range_eur[1]}`} />
-          <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-            <p className="text-xs uppercase tracking-wider text-text-secondary">Reason</p>
-            <p className="mt-2 text-sm leading-relaxed text-text-primary">
-              {hasTradeWindows
-                ? `Charge during ${schedule.charge_window.start}-${schedule.charge_window.end}, then discharge during ${schedule.discharge_window.start}-${schedule.discharge_window.end} if asset constraints remain acceptable.`
-                : 'No executable charge/discharge windows are currently recommended.'}
-            </p>
-          </div>
+
+        <div className="border border-border bg-surface px-3 py-2">
+          <p className="text-xs uppercase tracking-wider text-text-muted">Operating rationale</p>
+          <p className="mt-1 text-sm leading-relaxed text-text-primary">{operatingReason(schedule, hasTradeWindows)}</p>
         </div>
       </div>
-    </section>
+    </SectionPanel>
   )
 }
