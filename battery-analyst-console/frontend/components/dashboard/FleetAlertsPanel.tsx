@@ -79,6 +79,14 @@ export function FleetAlertsPanel({ alerts, assets }: FleetAlertsPanelProps) {
     info: allAlerts.filter((alert) => alert.severity === 'info')
   }
 
+  if (allAlerts.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-surface-elevated/50 p-6 text-sm text-text-muted">
+        No active alerts from the latest schedule.
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {(['critical', 'warning', 'info'] as const).map((severity) => (

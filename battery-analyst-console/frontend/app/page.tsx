@@ -13,7 +13,7 @@ import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
 import { RecommendationSection } from '@/components/dashboard/RecommendationSection'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { TabId, TabNav } from '@/components/dashboard/TabNav'
-import { getAlerts, getForecast, getSchedule, isUsingMockData, runBacktest, runScenario } from '@/lib/api'
+import { getForecast, getSchedule, isUsingMockData, runBacktest, runScenario } from '@/lib/api'
 import { mockAlerts, mockFleetAssets, mockForecastData, mockScheduleResponse } from '@/lib/mock-data'
 import { buildDefaultSchedulerInput } from '@/lib/sample-inputs'
 import {
@@ -51,6 +51,10 @@ function todayAthens(): string {
 
 function normalizeEfficiency(value: number): number {
   return value > 1 ? value / 100 : value
+}
+
+function scheduleAlertsOrFallback(schedule: ScheduleResponse, fallback: Alert[] = []): Alert[] {
+  return schedule.alerts?.length ? schedule.alerts : fallback
 }
 
 function effectiveAction(asset: BatteryAsset): EffectiveBatteryAction {
@@ -148,21 +152,20 @@ export default function Home() {
       setIsLoading(true)
       setError(null)
       try {
-        const [schedule, forecast, alertData] = await Promise.all([
+        const [schedule, forecast] = await Promise.all([
           getSchedule(mockScheduleResponse.date, 'balanced'),
-          getForecast(mockScheduleResponse.date),
-          getAlerts()
+          getForecast(mockScheduleResponse.date)
         ])
         if (!mounted) return
         setScheduleData(schedule)
         setForecastData(forecast)
-        setAlerts(alertData)
+        setAlerts(scheduleAlertsOrFallback(schedule, mockAlerts))
       } catch {
         if (!mounted) return
         setError('Unable to load live API data. Showing local mock data.')
         setScheduleData(mockScheduleResponse)
         setForecastData(mockForecastData)
-        setAlerts(mockAlerts)
+        setAlerts(scheduleAlertsOrFallback(mockScheduleResponse, mockAlerts))
       } finally {
         if (mounted) setIsLoading(false)
       }
@@ -212,6 +215,7 @@ export default function Home() {
         scheduleData
       )
       setScheduleData(result)
+      setAlerts(scheduleAlertsOrFallback(result))
     } catch {
       setError('Scenario API failed. Local mock scenario is still available.')
     } finally {
@@ -319,7 +323,7 @@ export default function Home() {
 
         {activeTab === 'alerts' && (
           <div className="space-y-6">
-            <SectionHeader title="Alerts" subtitle="Operational risks grouped by severity." />
+            <SectionHeader title="Alerts" subtitle="Operational risks from the latest schedule or scenario." />
             <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />
           </div>
         )}

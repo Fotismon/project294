@@ -381,8 +381,9 @@ export async function runBacktest(payload: BacktestRequest): Promise<BacktestRes
 }
 
 export async function getAlerts(): Promise<Alert[]> {
-  // Dedicated /alerts endpoint does not exist yet; alerts arrive on schedule and scenario responses.
-  return API_BASE_URL ? mockAlerts : mockAlerts
+  // No dedicated /alerts endpoint exists yet.
+  // Alerts are returned as part of /schedule and /scenario responses.
+  return mockAlerts
 }
 
 export async function getFleet(): Promise<FleetResponse> {
