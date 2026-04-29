@@ -1,9 +1,21 @@
 'use client'
 
 import React from 'react'
-import { BacktestResponse, BatteryAsset, RiskAppetite } from '@/types/api'
-import { ForecastChart } from './ForecastChart'
-import { MetricCard } from './MetricCard'
+import {
+  BacktestResponse,
+  BatteryAsset,
+  BackendBacktestEconomicResult,
+  BackendBacktestRealizedWindow,
+  RiskAppetite
+} from '@/types/api'
+import {
+  ConfidenceBadge,
+  DecisionBadge,
+  EmptyState,
+  MetricCard,
+  SectionPanel,
+  StatusBadge
+} from '@/components/ui'
 
 interface BacktestPanelProps {
   date: string
@@ -16,53 +28,101 @@ interface BacktestPanelProps {
   assets?: BatteryAsset[]
 }
 
-function formatDecision(value: string): string {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+function formatEuro(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0
+  }).format(value)
 }
 
-function formatCurrency(value: number): string {
-  return `EUR ${Math.round(value)}`
+function formatEuroRange(range?: number[] | [number, number]): string {
+  if (!range || range.length < 2) return 'Unavailable'
+  return `${formatEuro(range[0])}-${formatEuro(range[1])}`
 }
 
 function formatPrice(value: number): string {
   return `${value.toFixed(1)} EUR/MWh`
 }
 
-export function BacktestPanel({ date, onDateChange, profile, onProfileChange, onRunBacktest, isRunning, result, assets = [] }: BacktestPanelProps) {
-  const assetDistribution = {
-    charge: assets.filter((asset) => asset.auto_action === 'charge').length,
-    discharge: assets.filter((asset) => asset.auto_action === 'discharge').length,
-    idle: assets.filter((asset) => asset.auto_action === 'idle').length
-  }
+function formatSpread(value: number): string {
+  return formatPrice(value)
+}
+
+function formatSignedEuro(value: number): string {
+  const prefix = value > 0 ? '+' : ''
+  return `${prefix}${formatEuro(value)}`
+}
+
+function formatSignedPrice(value: number): string {
+  const prefix = value > 0 ? '+' : ''
+  return `${prefix}${formatPrice(value)}`
+}
+
+function humanize(value: string): string {
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function hasMissingDataWarning(result: BacktestResponse): boolean {
+  return result.warnings.some((warning) => {
+    const normalized = warning.toLowerCase()
+    return (
+      normalized.includes('market data') ||
+      normalized.includes('csv') ||
+      normalized.includes('historical') ||
+      normalized.includes('unavailable') ||
+      normalized.includes('mock')
+    )
+  })
+}
+
+function windowDifference(window: BackendBacktestRealizedWindow): number {
+  return window.realized_avg_price - window.forecast_avg_price
+}
+
+function realizedValue(result: BacktestResponse): number {
+  return result.economic_result?.realized_value_eur ?? result.realized_value_eur ?? 0
+}
+
+function valueError(result: BacktestResponse): number {
+  return result.economic_result?.value_error_eur ?? 0
+}
+
+export function BacktestPanel({
+  date,
+  onDateChange,
+  profile,
+  onProfileChange,
+  onRunBacktest,
+  isRunning,
+  result,
+  assets = []
+}: BacktestPanelProps) {
+  const missingData = result ? hasMissingDataWarning(result) : false
   const economic = result?.economic_result ?? null
-  const expectedRange = economic?.forecast_expected_value_range_eur ?? null
-  const expectedValue = result?.expected_value_eur ?? (expectedRange && expectedRange.length >= 2 ? Math.round((expectedRange[0] + expectedRange[1]) / 2) : 0)
-  const realizedValue = result?.realized_value_eur ?? Math.round(economic?.realized_value_eur ?? 0)
-  const actualSpread = result?.actual_spread ?? economic?.realized_spread_after_efficiency ?? 0
-  const recommendationQuality = result?.recommendation_quality ?? 'fair'
-  const explanation = Array.isArray(result?.explanation) ? result.explanation.join(' ') : ''
-  const forecastPoints = result?.forecast_points ?? []
-  const warnings = result?.warnings ?? []
+  const isHold = result?.decision === 'hold'
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
+      <SectionPanel title="Backtest Controls" subtitle="Select a historical date and operating profile.">
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <label className="mb-2 block text-xs text-text-secondary">Historical Date</label>
+            <label className="mb-2 block text-xs uppercase tracking-wider text-text-secondary">Historical date</label>
             <input
               type="date"
               value={date}
               onChange={(event) => onDateChange(event.target.value)}
-              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary"
+              className="border border-border bg-surface px-3 py-2 text-sm text-text-primary"
             />
           </div>
           <div>
-            <label className="mb-2 block text-xs text-text-secondary">Battery Profile</label>
+            <label className="mb-2 block text-xs uppercase tracking-wider text-text-secondary">Battery profile</label>
             <select
               value={profile}
               onChange={(event) => onProfileChange(event.target.value as RiskAppetite)}
-              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary"
+              className="border border-border bg-surface px-3 py-2 text-sm text-text-primary"
             >
               <option value="conservative">Conservative</option>
               <option value="balanced">Balanced</option>
@@ -72,150 +132,285 @@ export function BacktestPanel({ date, onDateChange, profile, onProfileChange, on
           <button
             onClick={onRunBacktest}
             disabled={isRunning}
-            className={`rounded-lg px-6 py-2 text-sm font-medium transition ${
-              isRunning ? 'cursor-not-allowed bg-surface-elevated text-text-muted' : 'bg-info text-white hover:bg-info/80'
+            className={`border px-5 py-2 text-sm font-medium transition ${
+              isRunning
+                ? 'cursor-not-allowed border-border bg-surface-elevated text-text-muted'
+                : 'border-info bg-info text-white hover:bg-info/80'
             }`}
           >
             {isRunning ? 'Running...' : 'Run Backtest'}
           </button>
         </div>
+      </SectionPanel>
+
+      <SectionPanel
+        title="Backtest Result"
+        subtitle="Forecast recommendation compared against realized historical prices."
+      >
+        {!result ? (
+          <EmptyState
+            title="No backtest run yet"
+            message="Select a historical date and run a backtest to compare forecasted and realized economics."
+          />
+        ) : (
+          <div className="space-y-6">
+            {missingData && (
+              <div className="border border-warning/40 bg-warning/10 p-4">
+                <StatusBadge label="Historical data unavailable" tone="warning" dot />
+                <p className="mt-3 text-sm leading-relaxed text-text-primary">
+                  Add market_prices.csv with 96 intervals for the selected date to enable real backtesting.
+                </p>
+                <p className="mt-1 text-sm text-text-secondary">The UI is displaying mock fallback data.</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <MetricCard
+                label="Decision"
+                value={<DecisionBadge decision={result.decision} size="md" />}
+                helperText={result.profile_name}
+              />
+              <MetricCard
+                label="Confidence"
+                value={<ConfidenceBadge confidence={result.confidence} size="md" />}
+                helperText={result.date}
+              />
+              <MetricCard
+                label="Forecast method"
+                value={humanize(result.forecast_method)}
+                helperText="Method used to build the forecast baseline."
+              />
+              <MetricCard
+                label="Realized value"
+                value={formatEuro(realizedValue(result))}
+                tone={realizedValue(result) >= 0 ? 'positive' : 'warning'}
+                helperText={isHold ? 'No trade executed.' : 'Historical trade value.'}
+              />
+              <MetricCard
+                label="Value error"
+                value={formatSignedEuro(valueError(result))}
+                tone={valueError(result) >= 0 ? 'positive' : 'warning'}
+                helperText="Realized value minus forecast midpoint."
+              />
+            </div>
+
+            {isHold && (
+              <div className="border border-border bg-surface p-4">
+                <p className="text-sm font-semibold text-text-primary">
+                  Scheduler returned hold, so no realized trade value was calculated.
+                </p>
+                <p className="mt-2 text-sm text-text-secondary">
+                  This is a valid backtest outcome when the forecasted spread does not justify an executable schedule.
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <WindowComparison label="Charge price comparison" window={result.charge_window} type="charge" />
+              <WindowComparison label="Discharge price comparison" window={result.discharge_window} type="discharge" />
+            </div>
+
+            <EconomicResult result={economic} isHold={isHold} />
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <BacktestWarnings warnings={result.warnings} missingData={missingData} />
+              <BacktestExplanation explanation={result.explanation} />
+            </div>
+
+            {assets.length > 0 && (
+              <div className="border border-border bg-surface p-4">
+                <p className="text-xs uppercase tracking-wider text-text-secondary">Fleet context</p>
+                <p className="mt-2 text-sm text-text-primary">
+                  Backtest result is being reviewed against {assets.length} configured battery assets.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </SectionPanel>
+    </div>
+  )
+}
+
+function WindowComparison({
+  label,
+  window,
+  type
+}: {
+  label: string
+  window: BackendBacktestRealizedWindow | null
+  type: 'charge' | 'discharge'
+}) {
+  if (!window) {
+    return (
+      <div className="border border-border bg-surface p-4">
+        <p className="text-xs uppercase tracking-wider text-text-secondary">{label}</p>
+        <p className="mt-3 text-sm font-semibold text-text-primary">
+          No {type} window was executed.
+        </p>
+        <p className="mt-1 text-sm text-text-secondary">
+          The backtest response did not include a realized {type} interval.
+        </p>
       </div>
+    )
+  }
 
-      {result ? (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCard label="Historical Decision" value={formatDecision(result.decision)} variant={result.decision === 'execute' || result.decision === 'execute_with_caution' ? 'success' : 'warning'} size="sm" />
-            <MetricCard label="Confidence" value={formatDecision(result.confidence)} size="sm" />
-            <MetricCard label="Realized Value" value={formatCurrency(realizedValue)} variant={realizedValue >= expectedValue * 0.8 ? 'success' : 'warning'} size="sm" />
-            <MetricCard label="Actual Spread" value={actualSpread.toFixed(1)} unit="EUR/MWh" size="sm" />
-          </div>
+  const difference = windowDifference(window)
 
-          {warnings.length > 0 && (
-            <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
-              <h3 className="mb-2 text-xs uppercase tracking-wider text-warning">Backtest Warnings</h3>
-              <ul className="space-y-1 text-sm text-text-primary">
-                {warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-            <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Backtest Summary</h3>
-            <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
-              <SummaryItem label="Batteries Simulated" value={assets.length || 8} />
-              <SummaryItem label="Charge" value={assetDistribution.charge || 4} />
-              <SummaryItem label="Discharge" value={assetDistribution.discharge || 2} />
-              <SummaryItem label="Idle" value={assetDistribution.idle || 2} />
-              <SummaryItem label="Fleet Realized Value" value={formatCurrency(realizedValue)} />
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-            <h3 className="mb-4 text-xs uppercase tracking-wider text-text-secondary">Actual vs Forecast</h3>
-            <ForecastChart data={forecastPoints} chargeWindow={result.charge_window ?? undefined} dischargeWindow={result.discharge_window ?? undefined} />
-          </div>
-
-          {assets.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-              <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Asset-Level Outcome</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-left text-sm">
-                  <thead className="text-xs uppercase tracking-wider text-text-muted">
-                    <tr>
-                      <th className="py-2 pr-3">Battery</th>
-                      <th className="py-2 pr-3">Site</th>
-                      <th className="py-2 pr-3">Recommended</th>
-                      <th className="py-2 pr-3">SoC</th>
-                      <th className="py-2 pr-3">Stress</th>
-                      <th className="py-2 pr-3">Value</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {assets.map((asset) => (
-                      <tr key={asset.id}>
-                        <td className="py-2 pr-3 text-text-primary">{asset.name}</td>
-                        <td className="py-2 pr-3 text-text-secondary">{asset.site}</td>
-                        <td className="py-2 pr-3 text-text-primary">{asset.auto_action}</td>
-                        <td className="py-2 pr-3 text-text-primary">{Math.round(asset.soc * 100)}%</td>
-                        <td className="py-2 pr-3 text-text-primary">{asset.stress_level}</td>
-                        <td className="py-2 pr-3 text-text-primary">EUR {asset.expected_value_eur[0]}-EUR {asset.expected_value_eur[1]}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-              <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Recommended Windows</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-xs text-text-muted">Charge Window</p>
-                  <p className="text-text-primary">{result.charge_window ? `${result.charge_window.start}-${result.charge_window.end}` : 'No trade'}</p>
-                  {result.charge_window ? (
-                    <div className="mt-1 space-y-1 text-xs text-text-muted">
-                      <p>Forecast {formatPrice(result.charge_window.forecast_avg_price)}</p>
-                      <p>Realized {formatPrice(result.charge_window.realized_avg_price)}</p>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-text-muted">Decision did not include a charge window.</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-xs text-text-muted">Discharge Window</p>
-                  <p className="text-text-primary">{result.discharge_window ? `${result.discharge_window.start}-${result.discharge_window.end}` : 'No trade'}</p>
-                  {result.discharge_window ? (
-                    <div className="mt-1 space-y-1 text-xs text-text-muted">
-                      <p>Forecast {formatPrice(result.discharge_window.forecast_avg_price)}</p>
-                      <p>Realized {formatPrice(result.discharge_window.realized_avg_price)}</p>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-text-muted">Decision did not include a discharge window.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-              <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Economic Result</h3>
-              {economic ? (
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <SummaryItem label="Forecast Spread" value={formatPrice(economic.forecast_spread_after_efficiency)} />
-                  <SummaryItem label="Realized Spread" value={formatPrice(economic.realized_spread_after_efficiency)} />
-                  <SummaryItem label="Forecast Value" value={expectedRange && expectedRange.length >= 2 ? `EUR ${expectedRange[0]}-EUR ${expectedRange[1]}` : formatCurrency(expectedValue)} />
-                  <SummaryItem label="Value Error" value={formatCurrency(economic.value_error_eur)} />
-                </div>
-              ) : (
-                <p className="text-sm text-text-secondary">No realized trade value was calculated.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-            <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Recommendation Quality</h3>
-            <span className="mb-3 inline-block rounded bg-success/10 px-3 py-1 text-sm font-medium text-success">
-              {formatDecision(recommendationQuality)}
-            </span>
-            <p className="text-sm leading-relaxed text-text-secondary">{explanation}</p>
-          </div>
+  return (
+    <div className="border border-border bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-wider text-text-secondary">{label}</p>
+          <p className="mt-2 text-lg font-semibold text-text-primary">
+            {window.start}-{window.end}
+          </p>
         </div>
+        <StatusBadge
+          label={formatSignedPrice(difference)}
+          tone={difference <= 0 && type === 'charge' ? 'positive' : difference >= 0 && type === 'discharge' ? 'positive' : 'warning'}
+        />
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <ComparisonValue label="Forecast" value={formatPrice(window.forecast_avg_price)} />
+        <ComparisonValue label="Realized" value={formatPrice(window.realized_avg_price)} />
+        <ComparisonValue label="Difference" value={formatSignedPrice(difference)} />
+      </div>
+    </div>
+  )
+}
+
+function ComparisonValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-border bg-surface-elevated/40 p-3">
+      <p className="text-xs uppercase tracking-wider text-text-muted">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-text-primary">{value}</p>
+    </div>
+  )
+}
+
+function EconomicResult({
+  result,
+  isHold
+}: {
+  result: BackendBacktestEconomicResult | null
+  isHold: boolean
+}) {
+  if (!result) {
+    return (
+      <div className="border border-border bg-surface p-4">
+        <p className="text-xs uppercase tracking-wider text-text-secondary">Economic result</p>
+        <p className="mt-3 text-sm font-semibold text-text-primary">No realized trade value was calculated.</p>
+        {isHold && (
+          <p className="mt-1 text-sm text-text-secondary">
+            Scheduler returned hold, so forecast and realized execution economics are not available.
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  const spreadDifference = result.realized_spread_after_efficiency - result.forecast_spread_after_efficiency
+
+  return (
+    <div className="border border-border bg-surface p-4">
+      <p className="text-xs uppercase tracking-wider text-text-secondary">Economic result</p>
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <MetricCard
+          label="Forecast spread"
+          value={formatSpread(result.forecast_spread_after_efficiency)}
+          className="bg-surface"
+        />
+        <MetricCard
+          label="Realized spread"
+          value={formatSpread(result.realized_spread_after_efficiency)}
+          className="bg-surface"
+        />
+        <MetricCard
+          label="Spread error"
+          value={formatSignedPrice(spreadDifference)}
+          tone={spreadDifference >= 0 ? 'positive' : 'warning'}
+          className="bg-surface"
+        />
+        <MetricCard
+          label="Expected value"
+          value={formatEuroRange(result.forecast_expected_value_range_eur)}
+          className="bg-surface"
+        />
+        <MetricCard
+          label="Realized value"
+          value={formatEuro(result.realized_value_eur)}
+          trend={formatSignedEuro(result.value_error_eur)}
+          tone={result.value_error_eur >= 0 ? 'positive' : 'warning'}
+          className="bg-surface"
+        />
+      </div>
+    </div>
+  )
+}
+
+function BacktestWarnings({
+  warnings,
+  missingData
+}: {
+  warnings: string[]
+  missingData: boolean
+}) {
+  return (
+    <div className="border border-border bg-surface p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs uppercase tracking-wider text-text-secondary">Warnings</p>
+        <StatusBadge
+          label={warnings.length > 0 ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'}` : 'No warnings'}
+          tone={warnings.length > 0 ? 'warning' : 'positive'}
+          dot
+        />
+      </div>
+      {warnings.length > 0 ? (
+        <ul className="mt-4 space-y-2 text-sm text-text-secondary">
+          {warnings.map((warning) => (
+            <li key={warning} className="border-l-2 border-warning/50 pl-3">
+              {warning}
+            </li>
+          ))}
+        </ul>
       ) : (
-        <div className="rounded-lg border border-border bg-surface-elevated/50 p-8 text-center">
-          <p className="text-text-muted">Select a historical date and profile, then run backtest.</p>
-        </div>
+        <p className="mt-4 text-sm text-text-secondary">No backtest warnings.</p>
+      )}
+      {missingData && (
+        <p className="mt-3 text-xs text-text-muted">
+          Real historical validation requires local market_prices.csv coverage for the selected date.
+        </p>
       )}
     </div>
   )
 }
 
-function SummaryItem({ label, value }: { label: string; value: string | number }) {
+function BacktestExplanation({ explanation }: { explanation: string[] }) {
+  const visibleExplanation = explanation.slice(0, 5)
+  const hiddenCount = Math.max(explanation.length - visibleExplanation.length, 0)
+
   return (
-    <div className="rounded-md border border-border bg-surface p-3">
-      <p className="text-xs text-text-muted">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-text-primary">{value}</p>
+    <div className="border border-border bg-surface p-4">
+      <p className="text-xs uppercase tracking-wider text-text-secondary">Explanation</p>
+      {visibleExplanation.length > 0 ? (
+        <>
+          <ul className="mt-4 space-y-2 text-sm text-text-secondary">
+            {visibleExplanation.map((item) => (
+              <li key={item} className="border-l-2 border-info/40 pl-3">
+                {item}
+              </li>
+            ))}
+          </ul>
+          {hiddenCount > 0 && (
+            <p className="mt-3 text-xs text-text-muted">
+              {hiddenCount} additional explanation point{hiddenCount === 1 ? '' : 's'} returned.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-4 text-sm text-text-secondary">No backtest explanation returned.</p>
+      )}
     </div>
   )
 }
