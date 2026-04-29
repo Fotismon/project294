@@ -2,21 +2,32 @@
 
 import React from 'react'
 import { ScheduleResponse } from '@/types/api'
-import { MetricCard } from './MetricCard'
+import { ConfidenceBadge, DecisionBadge, MetricCard, StressBadge } from '@/components/ui'
 
 interface RecommendationCardsProps {
   schedule: ScheduleResponse
 }
 
-function titleCase(value: string): string {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+function formatEuro(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+    style: 'currency',
+    currency: 'EUR'
+  }).format(value)
 }
 
-function decisionVariant(decision: ScheduleResponse['decision']) {
-  if (decision === 'execute') return 'success'
-  if (decision === 'execute_with_caution') return 'warning'
-  if (decision === 'watch') return 'info'
-  return 'error'
+function formatCurrencyRange(range: [number, number] | number[]): string {
+  const low = range[0] ?? 0
+  const high = range[1] ?? low
+  return `${formatEuro(low)}-${formatEuro(high)}`
+}
+
+function formatSpread(value: number): string {
+  return `${value.toFixed(2)} EUR/MWh`
+}
+
+function formatPrice(value: number): string {
+  return `${value.toFixed(1)} EUR/MWh`
 }
 
 function windowValue(window: ScheduleResponse['charge_window']): string {
@@ -26,30 +37,40 @@ function windowValue(window: ScheduleResponse['charge_window']): string {
 
 export function RecommendationCards({ schedule }: RecommendationCardsProps) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
-      <MetricCard label="Decision" value={titleCase(schedule.decision)} variant={decisionVariant(schedule.decision)} size="sm" />
-      <MetricCard label="Confidence" value={titleCase(schedule.confidence)} size="sm" />
-      <MetricCard
-        label="Charge Window"
-        value={windowValue(schedule.charge_window)}
-        subValue={`@ ${schedule.charge_window.avg_price} €/MWh`}
-        size="sm"
-      />
-      <MetricCard
-        label="Discharge Window"
-        value={windowValue(schedule.discharge_window)}
-        subValue={`@ ${schedule.discharge_window.avg_price} €/MWh`}
-        size="sm"
-      />
-      <MetricCard label="Expected Value" value={`€${schedule.expected_value_range_eur[0]}-€${schedule.expected_value_range_eur[1]}`} size="sm" />
-      <MetricCard label="Spread After RTE" value={schedule.spread_after_efficiency.toFixed(1)} unit="€/MWh" size="sm" />
-      <MetricCard
-        label="Battery Stress"
-        value={schedule.battery_stress.score}
-        subValue={titleCase(schedule.battery_stress.level)}
-        variant={schedule.battery_stress.level === 'low' ? 'success' : schedule.battery_stress.level === 'medium' ? 'warning' : 'error'}
-        size="sm"
-      />
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        <DecisionBadge decision={schedule.decision} size="md" />
+        <ConfidenceBadge confidence={schedule.confidence} size="md" />
+        <StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} size="md" />
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <MetricCard
+          label="Expected value"
+          value={formatCurrencyRange(schedule.expected_value_range_eur)}
+          tone="positive"
+        />
+        <MetricCard
+          label="Spread after efficiency"
+          value={formatSpread(schedule.spread_after_efficiency)}
+          tone="info"
+        />
+        <MetricCard
+          label="Charge window"
+          value={windowValue(schedule.charge_window)}
+          helperText={`Forecast ${formatPrice(schedule.charge_window.avg_price)}`}
+        />
+        <MetricCard
+          label="Discharge window"
+          value={windowValue(schedule.discharge_window)}
+          helperText={`Forecast ${formatPrice(schedule.discharge_window.avg_price)}`}
+        />
+        <MetricCard
+          label="Stress score"
+          value={schedule.battery_stress.score}
+          helperText={schedule.battery_stress.level}
+          tone={schedule.battery_stress.level === 'low' ? 'positive' : schedule.battery_stress.level === 'medium' ? 'warning' : 'critical'}
+        />
+      </div>
     </div>
   )
 }

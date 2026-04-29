@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { FleetRecommendation, ScheduleResponse } from '@/types/api'
+import { EmptyState, SectionPanel } from '@/components/ui'
 import { AlertCard } from './AlertCard'
 import { AlternativesPanel } from './AlternativesPanel'
 import { BatteryStressCard } from './BatteryStressCard'
@@ -43,10 +44,9 @@ export function RecommendationSection({ schedule, fleetRecommendation }: Recomme
 
 function ScheduleAlerts({ alerts }: { alerts: ScheduleResponse['alerts'] }) {
   return (
-    <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-      <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Schedule Alerts</h3>
+    <SectionPanel title="Schedule Alerts" subtitle="Operational risk flags returned with the latest recommendation.">
       {alerts.length === 0 ? (
-        <p className="text-sm text-text-muted">No active schedule alerts.</p>
+        <EmptyState title="No active schedule alerts." />
       ) : (
         <div className="space-y-3">
           {alerts.map((alert, index) => (
@@ -54,6 +54,6 @@ function ScheduleAlerts({ alerts }: { alerts: ScheduleResponse['alerts'] }) {
           ))}
         </div>
       )}
-    </div>
+    </SectionPanel>
   )
 }

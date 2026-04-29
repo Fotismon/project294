@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { EmptyState, SectionPanel } from '@/components/ui'
 
 interface ExplanationPanelProps {
   explanations: string[]
@@ -8,22 +9,21 @@ interface ExplanationPanelProps {
 
 export function ExplanationPanel({ explanations }: ExplanationPanelProps) {
   return (
-    <div className="border border-border rounded-lg bg-surface-elevated/50 p-4">
-      <h3 className="text-text-secondary text-xs uppercase tracking-wider mb-3">
-        Why This Recommendation?
-      </h3>
-      <div className="space-y-3">
-        {explanations.length === 0 ? (
-          <p className="text-text-muted text-sm">No explanation provided.</p>
-        ) : explanations.map((explanation, index) => (
-          <div key={index} className="flex items-start gap-3">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-info/20 text-info text-xs flex items-center justify-center font-medium">
-              {index + 1}
-            </span>
-            <p className="text-text-primary text-sm leading-relaxed">{explanation}</p>
-          </div>
-        ))}
-      </div>
-    </div>
+    <SectionPanel title="Why this recommendation?" subtitle="Scheduler rationale returned with the current decision.">
+      {explanations.length === 0 ? (
+        <EmptyState title="No explanation provided." />
+      ) : (
+        <ol className="space-y-3">
+          {explanations.map((explanation, index) => (
+            <li key={index} className="flex items-start gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-info/30 bg-info/10 text-xs font-medium text-info">
+                {index + 1}
+              </span>
+              <p className="text-sm leading-relaxed text-text-primary">{explanation}</p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </SectionPanel>
   )
 }

@@ -2,67 +2,90 @@
 
 import React from 'react'
 import { AlternativeSchedule } from '@/types/api'
+import { DecisionBadge, EmptyState, MetricCard, SectionPanel } from '@/components/ui'
 
 interface AlternativesPanelProps {
   alternatives: AlternativeSchedule[]
 }
 
+function formatEuro(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+    style: 'currency',
+    currency: 'EUR'
+  }).format(value)
+}
+
+function formatCurrencyRange(range: number[]): string {
+  const low = range[0] ?? 0
+  const high = range[1] ?? low
+  return `${formatEuro(low)}-${formatEuro(high)}`
+}
+
+function formatPrice(value: number): string {
+  return `${value.toFixed(1)} EUR/MWh`
+}
+
+function windowText(window: AlternativeSchedule['charge_window']): string {
+  return window ? `${window.start}-${window.end}` : 'Not returned'
+}
+
 export function AlternativesPanel({ alternatives }: AlternativesPanelProps) {
   return (
-    <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-      <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Alternatives Considered</h3>
+    <SectionPanel title="Alternatives Considered" subtitle="Other charge and discharge windows evaluated by the scheduler.">
       {alternatives.length === 0 ? (
-        <p className="text-sm text-text-muted">No alternatives returned.</p>
+        <EmptyState title="No alternatives returned." />
       ) : (
         <div className="space-y-4">
           {alternatives.map((alt, index) => {
             const expectedRange = alt.expected_value_range_eur
 
             return (
-            <div key={`${alt.label ?? 'alternative'}-${index}`} className="rounded-lg border border-border p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-medium text-text-primary">{alt.label || `Alternative ${index + 1}`}</span>
-                <span className="rounded bg-info/20 px-2 py-0.5 text-xs font-medium text-info">{alt.decision.replace(/_/g, ' ')}</span>
+              <div key={`${alt.label ?? 'alternative'}-${index}`} className="border border-border bg-surface p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-text-primary">{alt.label || `Alternative ${index + 1}`}</span>
+                  <DecisionBadge decision={alt.decision} />
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <MetricCard
+                    label="Charge window"
+                    value={windowText(alt.charge_window)}
+                    helperText={alt.charge_window ? formatPrice(alt.charge_window.avg_price) : undefined}
+                  />
+                  <MetricCard
+                    label="Discharge window"
+                    value={windowText(alt.discharge_window)}
+                    helperText={alt.discharge_window ? formatPrice(alt.discharge_window.avg_price) : undefined}
+                  />
+                  <MetricCard
+                    label="Spread after efficiency"
+                    value={`${alt.spread_after_efficiency.toFixed(2)} EUR/MWh`}
+                    tone="info"
+                  />
+                  {expectedRange && expectedRange.length >= 2 && (
+                    <MetricCard
+                      label="Expected value"
+                      value={formatCurrencyRange(expectedRange)}
+                      tone="positive"
+                    />
+                  )}
+                </div>
+                {alt.reason && <p className="mt-3 text-xs leading-relaxed text-text-secondary">{alt.reason}</p>}
+                {alt.rejection_reasons.length > 0 && (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <p className="mb-2 text-xs uppercase tracking-wider text-text-muted">Notes</p>
+                    <ul className="space-y-1">
+                      {alt.rejection_reasons.map((reason) => (
+                        <li key={reason} className="text-xs text-text-secondary">- {reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-              <div className="mb-2 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <div>
-                  <p className="text-xs text-text-muted">Charge Window</p>
-                  <p className="text-text-primary">
-                    {alt.charge_window ? `${alt.charge_window.start}-${alt.charge_window.end}` : 'Not returned'}
-                    {alt.charge_window && <span className="text-text-muted"> @ {alt.charge_window.avg_price} €/MWh</span>}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-text-muted">Discharge Window</p>
-                  <p className="text-text-primary">
-                    {alt.discharge_window ? `${alt.discharge_window.start}-${alt.discharge_window.end}` : 'Not returned'}
-                    {alt.discharge_window && <span className="text-text-muted"> @ {alt.discharge_window.avg_price} €/MWh</span>}
-                  </p>
-                </div>
-              </div>
-              <p className="mb-2 text-xs text-text-secondary">
-                Spread after efficiency: <span className="font-medium text-text-primary">{alt.spread_after_efficiency} €/MWh</span>
-              </p>
-              {expectedRange && expectedRange.length >= 2 && (
-                <p className="mb-2 text-xs text-text-secondary">
-                  Expected value: <span className="font-medium text-text-primary">€{expectedRange[0]}-€{expectedRange[1]}</span>
-                </p>
-              )}
-              {alt.reason && <p className="mb-2 text-xs text-text-secondary">{alt.reason}</p>}
-              {alt.rejection_reasons.length > 0 && (
-                <div className="border-t border-border pt-2">
-                  <p className="mb-1 text-xs text-text-muted">Notes</p>
-                  <ul className="space-y-1">
-                    {alt.rejection_reasons.map((reason) => (
-                      <li key={reason} className="text-xs text-text-secondary">- {reason}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )})}
+            )
+          })}
         </div>
       )}
-    </div>
+    </SectionPanel>
   )
 }
