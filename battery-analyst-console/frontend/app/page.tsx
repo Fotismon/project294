@@ -1,21 +1,34 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { AlertCard } from '@/components/dashboard/AlertCard'
-import { AlternativesPanel } from '@/components/dashboard/AlternativesPanel'
 import { BacktestPanel } from '@/components/dashboard/BacktestPanel'
 import { BatteryStressCard } from '@/components/dashboard/BatteryStressCard'
 import { ConstraintPanel } from '@/components/dashboard/ConstraintPanel'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
-import { ExplanationPanel } from '@/components/dashboard/ExplanationPanel'
-import { ForecastChart } from '@/components/dashboard/ForecastChart'
+import { FleetAlertsPanel } from '@/components/dashboard/FleetAlertsPanel'
+import { FleetManagerSection } from '@/components/dashboard/FleetManagerSection'
+import { MarketForecastSection } from '@/components/dashboard/MarketForecastSection'
 import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
+import { RecommendationSection } from '@/components/dashboard/RecommendationSection'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
-import { SoCFeasibilityCard } from '@/components/dashboard/SoCFeasibilityCard'
 import { TabId, TabNav } from '@/components/dashboard/TabNav'
 import { getAlerts, getForecast, getSchedule, isUsingMockData, runBacktest, runScenario } from '@/lib/api'
-import { mockAlerts, mockForecastData, mockScheduleResponse } from '@/lib/mock-data'
-import { Alert, BacktestResponse, ForecastPoint, RiskAppetite, ScheduleResponse, TemperaturePolicy } from '@/types/api'
+import { mockAlerts, mockFleetAssets, mockForecastData, mockScheduleResponse } from '@/lib/mock-data'
+import {
+  Alert,
+  BacktestResponse,
+  BatteryAction,
+  BatteryAsset,
+  EffectiveBatteryAction,
+  FleetForecastAction,
+  FleetRecommendation,
+  FleetSummary,
+  ForecastPoint,
+  RiskAppetite,
+  ScheduleResponse,
+  TemperaturePolicy
+} from '@/types/api'
 
 function formatDate(dateStr: string): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -35,11 +48,70 @@ function todayAthens(): string {
   }).format(new Date())
 }
 
+function effectiveAction(asset: BatteryAsset): EffectiveBatteryAction {
+  return asset.selected_action === 'auto' ? asset.auto_action : asset.selected_action
+}
+
+function calculateFleetSummary(assets: BatteryAsset[]): FleetSummary {
+  const totalCapacity = assets.reduce((sum, asset) => sum + asset.capacity_mwh, 0)
+  const totalPower = assets.reduce((sum, asset) => sum + asset.power_mw, 0)
+  const actions = assets.map(effectiveAction)
+  const autoActions = Array.from(new Set(assets.filter((asset) => asset.status !== 'offline').map((asset) => asset.auto_action)))
+  const forecastAction: FleetForecastAction = autoActions.length === 1 ? autoActions[0] : 'mixed'
+
+  return {
+    total_assets: assets.length,
+    available_assets: assets.filter((asset) => asset.status !== 'offline').length,
+    total_capacity_mwh: totalCapacity,
+    total_power_mw: totalPower,
+    average_soc: assets.reduce((sum, asset) => sum + asset.soc, 0) / Math.max(assets.length, 1),
+    forecast_driven_action: forecastAction,
+    assets_charging: actions.filter((action) => action === 'charge').length,
+    assets_discharging: actions.filter((action) => action === 'discharge').length,
+    assets_idle: actions.filter((action) => action === 'idle').length,
+    expected_value_eur: assets.reduce<[number, number]>(
+      (range, asset) => {
+        const action = effectiveAction(asset)
+        const multiplier = asset.status === 'offline' || action === 'idle' ? 0 : asset.selected_action === 'auto' ? 1 : action === asset.auto_action ? 0.95 : 0.7
+        return [
+          range[0] + Math.round(asset.expected_value_eur[0] * multiplier),
+          range[1] + Math.round(asset.expected_value_eur[1] * multiplier)
+        ]
+      },
+      [0, 0]
+    )
+  }
+}
+
+function calculateFleetRecommendation(assets: BatteryAsset[], summary: FleetSummary): FleetRecommendation {
+  const manualAssets = assets.filter((asset) => asset.selected_action !== 'auto')
+  const autoValue = assets.reduce<[number, number]>((range, asset) => [range[0] + asset.expected_value_eur[0], range[1] + asset.expected_value_eur[1]], [0, 0])
+  const warnings: string[] = []
+
+  manualAssets.forEach((asset) => {
+    if (asset.selected_action !== asset.auto_action) warnings.push(`${asset.name}: manual ${asset.selected_action} conflicts with auto ${asset.auto_action}.`)
+    if (asset.selected_action === 'discharge' && asset.soc < 0.25) warnings.push(`${asset.name}: low SoC asset should not discharge.`)
+    if (asset.stress_level === 'high' && asset.selected_action !== 'idle') warnings.push(`${asset.name}: high stress asset should remain idle.`)
+    if (asset.status === 'offline' && asset.selected_action !== 'idle' && asset.selected_action !== 'auto') warnings.push(`${asset.name}: offline asset cannot be manually dispatched.`)
+  })
+
+  if (summary.assets_discharging > Math.ceil(assets.length / 2)) warnings.push('Too many batteries are discharging simultaneously.')
+
+  return {
+    summary,
+    manual_override_count: manualAssets.length,
+    override_value_delta_eur: [summary.expected_value_eur[0] - autoValue[0], summary.expected_value_eur[1] - autoValue[1]],
+    warnings
+  }
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>('today')
   const [scheduleData, setScheduleData] = useState<ScheduleResponse>(mockScheduleResponse)
   const [forecastData, setForecastData] = useState<ForecastPoint[]>(mockForecastData)
   const [alerts, setAlerts] = useState<Alert[]>(mockAlerts)
+  const [fleetAssets, setFleetAssets] = useState<BatteryAsset[]>(mockFleetAssets)
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -55,6 +127,14 @@ export default function Home() {
   const [backtestProfile, setBacktestProfile] = useState<RiskAppetite>('balanced')
   const [backtestResult, setBacktestResult] = useState<BacktestResponse | null>(null)
   const [isBacktestRunning, setIsBacktestRunning] = useState(false)
+
+  const fleetSummary = useMemo(() => calculateFleetSummary(fleetAssets), [fleetAssets])
+  const fleetRecommendation = useMemo(() => calculateFleetRecommendation(fleetAssets, fleetSummary), [fleetAssets, fleetSummary])
+  const stressDistribution = useMemo(() => ({
+    low: fleetAssets.filter((asset) => asset.stress_level === 'low').length,
+    medium: fleetAssets.filter((asset) => asset.stress_level === 'medium').length,
+    high: fleetAssets.filter((asset) => asset.stress_level === 'high').length
+  }), [fleetAssets])
 
   useEffect(() => {
     let mounted = true
@@ -72,7 +152,7 @@ export default function Home() {
         setScheduleData(schedule)
         setForecastData(forecast)
         setAlerts(alertData)
-      } catch (loadError) {
+      } catch {
         if (!mounted) return
         setError('Unable to load live API data. Showing local mock data.')
         setScheduleData(mockScheduleResponse)
@@ -88,6 +168,18 @@ export default function Home() {
       mounted = false
     }
   }, [])
+
+  function handleToggleSelected(id: string) {
+    setSelectedAssetIds((current) => current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id])
+  }
+
+  function handleAssetActionChange(id: string, action: BatteryAction) {
+    setFleetAssets((current) => current.map((asset) => asset.id === id ? { ...asset, selected_action: action } : asset))
+  }
+
+  function handleApplyBulkAction(action: BatteryAction) {
+    setFleetAssets((current) => current.map((asset) => selectedAssetIds.includes(asset.id) ? { ...asset, selected_action: action } : asset))
+  }
 
   async function handleRunScenario() {
     setIsScenarioRunning(true)
@@ -127,12 +219,6 @@ export default function Home() {
     }
   }
 
-  const groupedAlerts = {
-    critical: alerts.filter((alert) => alert.severity === 'critical'),
-    warning: alerts.filter((alert) => alert.severity === 'warning'),
-    info: alerts.filter((alert) => alert.severity === 'info')
-  }
-
   return (
     <DashboardShell>
       <header className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
@@ -141,12 +227,8 @@ export default function Home() {
           <p className="mt-1 text-sm text-text-secondary">Forecasting is a commodity. Decision support is the product.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-lg border border-border bg-surface-elevated px-3 py-1 text-sm text-text-secondary">
-            Athens {formatDate(todayAthens())}
-          </span>
-          <span className="rounded-lg border border-border bg-surface-elevated px-3 py-1 text-sm text-text-secondary">
-            {isUsingMockData() ? 'Mock data' : 'API first'}
-          </span>
+          <span className="rounded-lg border border-border bg-surface-elevated px-3 py-1 text-sm text-text-secondary">Athens {formatDate(todayAthens())}</span>
+          <span className="rounded-lg border border-border bg-surface-elevated px-3 py-1 text-sm text-text-secondary">{isUsingMockData() ? 'Mock data' : 'API first'}</span>
         </div>
       </header>
 
@@ -160,31 +242,20 @@ export default function Home() {
 
       <main className="mt-6">
         {activeTab === 'today' && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <SectionHeader title="Today's Plan" subtitle={`${formatDate(scheduleData.date)} · Europe/Athens operating day`} />
-            <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-xs uppercase tracking-wider text-text-secondary">Price Forecast</h2>
-                <div className="flex gap-3 text-xs text-text-muted">
-                  <span>P50 line</span>
-                  <span>P10-P90 band</span>
-                  <span>Charge/discharge overlays</span>
-                </div>
-              </div>
-              <ForecastChart data={forecastData} chargeWindow={scheduleData.charge_window} dischargeWindow={scheduleData.discharge_window} />
-            </div>
-            <RecommendationCards schedule={scheduleData} />
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="space-y-6">
-                <ConstraintPanel constraints={scheduleData.physical_constraints} />
-                <BatteryStressCard stress={scheduleData.battery_stress} />
-              </div>
-              <div className="space-y-6">
-                <SoCFeasibilityCard feasibility={scheduleData.soc_feasibility} />
-                <AlternativesPanel alternatives={scheduleData.alternatives} />
-              </div>
-            </div>
-            <ExplanationPanel explanations={scheduleData.explanation} />
+            <MarketForecastSection forecastData={forecastData} schedule={scheduleData} currentSignal={fleetSummary.forecast_driven_action} />
+            <FleetManagerSection
+              assets={fleetAssets}
+              summary={fleetSummary}
+              selectedIds={selectedAssetIds}
+              onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
+              onClearSelection={() => setSelectedAssetIds([])}
+              onToggleSelected={handleToggleSelected}
+              onApplyAction={handleApplyBulkAction}
+              onAssetActionChange={handleAssetActionChange}
+            />
+            <RecommendationSection schedule={scheduleData} fleetRecommendation={fleetRecommendation} />
           </div>
         )}
 
@@ -208,6 +279,16 @@ export default function Home() {
               isRunning={isScenarioRunning}
             />
             <RecommendationCards schedule={scheduleData} />
+            <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
+              <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Impact Preview</h3>
+              <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
+                <PreviewItem label="Assets Affected" value={fleetAssets.length} />
+                <PreviewItem label="Fleet Value" value={`€${fleetSummary.expected_value_eur[0]}-€${fleetSummary.expected_value_eur[1]}`} />
+                <PreviewItem label="Stress Low/Med/High" value={`${stressDistribution.low}/${stressDistribution.medium}/${stressDistribution.high}`} />
+                <PreviewItem label="Charge/Discharge/Idle" value={`${fleetSummary.assets_charging}/${fleetSummary.assets_discharging}/${fleetSummary.assets_idle}`} />
+                <PreviewItem label="Manual Overrides" value={fleetRecommendation.manual_override_count} />
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <ConstraintPanel constraints={scheduleData.physical_constraints} />
               <BatteryStressCard stress={scheduleData.battery_stress} />
@@ -226,16 +307,7 @@ export default function Home() {
         {activeTab === 'alerts' && (
           <div className="space-y-6">
             <SectionHeader title="Alerts" subtitle="Operational risks grouped by severity." />
-            {(['critical', 'warning', 'info'] as const).map((severity) => (
-              <div key={severity} className="space-y-3">
-                <h3 className={`text-xs uppercase tracking-wider ${severity === 'critical' ? 'text-error' : severity === 'warning' ? 'text-warning' : 'text-info'}`}>
-                  {severity}
-                </h3>
-                {groupedAlerts[severity].map((alert) => (
-                  <AlertCard key={`${alert.severity}-${alert.title}`} alert={alert} />
-                ))}
-              </div>
-            ))}
+            <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />
           </div>
         )}
 
@@ -250,6 +322,7 @@ export default function Home() {
               onRunBacktest={handleRunBacktest}
               isRunning={isBacktestRunning}
               result={backtestResult}
+              assets={fleetAssets}
             />
           </div>
         )}
@@ -263,6 +336,15 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
     <div>
       <h2 className="text-2xl font-semibold text-text-primary">{title}</h2>
       <p className="mt-1 text-sm text-text-secondary">{subtitle}</p>
+    </div>
+  )
+}
+
+function PreviewItem({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md border border-border bg-surface p-3">
+      <p className="text-xs text-text-muted">{label}</p>
+      <p className="mt-1 text-base font-semibold text-text-primary">{value}</p>
     </div>
   )
 }

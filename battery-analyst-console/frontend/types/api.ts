@@ -7,6 +7,9 @@ export type Severity = 'critical' | 'warning' | 'info'
 export type BatteryStressLevel = 'low' | 'medium' | 'high'
 export type RiskAppetite = 'conservative' | 'balanced' | 'aggressive'
 export type TemperaturePolicy = 'permissive' | 'balanced' | 'conservative'
+export type BatteryAction = 'auto' | 'charge' | 'discharge' | 'idle'
+export type EffectiveBatteryAction = Exclude<BatteryAction, 'auto'>
+export type FleetForecastAction = EffectiveBatteryAction | 'mixed'
 
 export interface BatteryProfile {
   battery_id: string
@@ -18,6 +21,61 @@ export interface BatteryProfile {
   current_soc: number
   round_trip_efficiency: number
   max_cycles_per_day: number
+}
+
+export interface BatteryAsset {
+  id: string
+  name: string
+  site: string
+  status: 'available' | 'limited' | 'offline'
+  capacity_mwh: number
+  power_mw: number
+  soc: number
+  temperature_c: number
+  auto_action: EffectiveBatteryAction
+  selected_action: BatteryAction
+  expected_value_eur: [number, number]
+  stress_level: BatteryStressLevel
+  constraint_warnings: string[]
+}
+
+export interface FleetSummary {
+  total_assets: number
+  available_assets: number
+  total_capacity_mwh: number
+  total_power_mw: number
+  average_soc: number
+  forecast_driven_action: FleetForecastAction
+  assets_charging: number
+  assets_discharging: number
+  assets_idle: number
+  expected_value_eur: [number, number]
+}
+
+export interface FleetRecommendation {
+  summary: FleetSummary
+  manual_override_count: number
+  override_value_delta_eur: [number, number]
+  warnings: string[]
+}
+
+export interface FleetResponse {
+  assets: BatteryAsset[]
+  summary: FleetSummary
+}
+
+export interface FleetRecommendationRequest {
+  date: string
+  assets: BatteryAsset[]
+}
+
+export interface PatchBatteryActionRequest {
+  action: BatteryAction
+}
+
+export interface FleetBulkActionRequest {
+  asset_ids: string[]
+  action: BatteryAction
 }
 
 // Time window

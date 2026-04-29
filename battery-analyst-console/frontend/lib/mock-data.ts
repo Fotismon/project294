@@ -1,4 +1,4 @@
-import { Alert, BacktestResponse, ForecastPoint, ScheduleResponse } from '@/types/api'
+import { Alert, BacktestResponse, BatteryAsset, ForecastPoint, ScheduleResponse } from '@/types/api'
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10
@@ -144,6 +144,129 @@ export const mockScheduleResponse: ScheduleResponse = {
 
 export const mockForecastData: ForecastPoint[] = expandForecastTo96Points()
 
+export const mockFleetAssets: BatteryAsset[] = [
+  {
+    id: 'ath-01',
+    name: 'Athens Battery 01',
+    site: 'Athens North',
+    status: 'available',
+    capacity_mwh: 300,
+    power_mw: 100,
+    soc: 0.52,
+    temperature_c: 31,
+    auto_action: 'charge',
+    selected_action: 'auto',
+    expected_value_eur: [24, 36],
+    stress_level: 'medium',
+    constraint_warnings: ['Warm ambient conditions during evening discharge']
+  },
+  {
+    id: 'ath-02',
+    name: 'Athens Battery 02',
+    site: 'Athens South',
+    status: 'available',
+    capacity_mwh: 240,
+    power_mw: 80,
+    soc: 0.46,
+    temperature_c: 29,
+    auto_action: 'charge',
+    selected_action: 'auto',
+    expected_value_eur: [18, 28],
+    stress_level: 'low',
+    constraint_warnings: []
+  },
+  {
+    id: 'the-01',
+    name: 'Thessaloniki Battery 01',
+    site: 'Thessaloniki Hub',
+    status: 'limited',
+    capacity_mwh: 180,
+    power_mw: 60,
+    soc: 0.78,
+    temperature_c: 34,
+    auto_action: 'idle',
+    selected_action: 'auto',
+    expected_value_eur: [4, 9],
+    stress_level: 'high',
+    constraint_warnings: ['Temperature risk', 'Limited inverter availability']
+  },
+  {
+    id: 'cre-01',
+    name: 'Crete Battery 01',
+    site: 'Heraklion',
+    status: 'available',
+    capacity_mwh: 220,
+    power_mw: 70,
+    soc: 0.81,
+    temperature_c: 33,
+    auto_action: 'discharge',
+    selected_action: 'auto',
+    expected_value_eur: [22, 34],
+    stress_level: 'medium',
+    constraint_warnings: ['High SoC asset prioritized for evening discharge']
+  },
+  {
+    id: 'pat-01',
+    name: 'Patras Battery 01',
+    site: 'Patras West',
+    status: 'available',
+    capacity_mwh: 150,
+    power_mw: 50,
+    soc: 0.37,
+    temperature_c: 27,
+    auto_action: 'charge',
+    selected_action: 'auto',
+    expected_value_eur: [12, 20],
+    stress_level: 'low',
+    constraint_warnings: []
+  },
+  {
+    id: 'vol-01',
+    name: 'Volos Battery 01',
+    site: 'Volos Port',
+    status: 'offline',
+    capacity_mwh: 120,
+    power_mw: 40,
+    soc: 0.22,
+    temperature_c: 26,
+    auto_action: 'idle',
+    selected_action: 'auto',
+    expected_value_eur: [0, 0],
+    stress_level: 'low',
+    constraint_warnings: ['Offline for maintenance']
+  },
+  {
+    id: 'lar-01',
+    name: 'Larissa Battery 01',
+    site: 'Larissa Grid Node',
+    status: 'available',
+    capacity_mwh: 260,
+    power_mw: 90,
+    soc: 0.68,
+    temperature_c: 32,
+    auto_action: 'discharge',
+    selected_action: 'auto',
+    expected_value_eur: [26, 39],
+    stress_level: 'medium',
+    constraint_warnings: []
+  },
+  {
+    id: 'ioa-01',
+    name: 'Ioannina Battery 01',
+    site: 'Ioannina Storage',
+    status: 'limited',
+    capacity_mwh: 160,
+    power_mw: 55,
+    soc: 0.18,
+    temperature_c: 24,
+    auto_action: 'charge',
+    selected_action: 'auto',
+    expected_value_eur: [8, 15],
+    stress_level: 'medium',
+    constraint_warnings: ['Low SoC asset cannot discharge safely']
+  }
+]
+
 export const mockBacktestForecastData: ForecastPoint[] = expandForecastTo96Points('2026-04-25').map((point, index) => ({
   ...point,
   actual_price: round1(point.p50_price + Math.sin(index / 5) * 6 - (point.action === 'discharge' ? 4 : 0))
@@ -180,6 +303,42 @@ export const mockAlerts: Alert[] = [
     title: 'Data quality warning',
     message: 'Some forecast data points have elevated uncertainty.',
     recommended_action: 'Use median P50 prices for planning and review confidence levels.'
+  },
+  {
+    severity: 'critical',
+    title: 'Battery offline',
+    message: 'Volos Battery 01 is offline for maintenance and excluded from dispatch.',
+    recommended_action: 'Keep asset idle and verify maintenance window.'
+  },
+  {
+    severity: 'warning',
+    title: 'High temperature battery',
+    message: 'Thessaloniki Battery 01 is operating near the high-temperature caution band.',
+    recommended_action: 'Prefer idle or conservative dispatch until temperature normalizes.'
+  },
+  {
+    severity: 'warning',
+    title: 'Manual override conflicts with forecast',
+    message: 'One or more manual actions may oppose the current market-driven recommendation.',
+    recommended_action: 'Review override rationale before final dispatch.'
+  },
+  {
+    severity: 'warning',
+    title: 'Too many batteries discharging',
+    message: 'Fleet discharge concentration can increase grid and battery stress.',
+    recommended_action: 'Stagger discharge actions or return selected assets to auto mode.'
+  },
+  {
+    severity: 'info',
+    title: 'Low SoC asset cannot discharge',
+    message: 'Ioannina Battery 01 is below the preferred SoC threshold for discharge.',
+    recommended_action: 'Keep charging or idle until SoC recovers.'
+  },
+  {
+    severity: 'warning',
+    title: 'High stress asset should remain idle',
+    message: 'Thessaloniki Battery 01 has high stress and limited availability.',
+    recommended_action: 'Avoid manual discharge unless the market signal is exceptional.'
   }
 ]
 
