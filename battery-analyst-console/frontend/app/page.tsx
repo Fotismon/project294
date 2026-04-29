@@ -11,6 +11,7 @@ import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { FleetAlertsPanel } from '@/components/dashboard/FleetAlertsPanel'
 import { FleetOverview } from '@/components/dashboard/FleetOverview'
 import { FleetManagerSection } from '@/components/dashboard/FleetManagerSection'
+import { NoActionPanel } from '@/components/dashboard/NoActionPanel'
 import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { ConsoleSectionId } from '@/components/dashboard/SideNav'
@@ -452,7 +453,25 @@ export default function Home() {
               onRunScenario={handleRunScenario}
               isRunning={isScenarioRunning}
             />
-            <RecommendationCards schedule={scheduleData} />
+            {scheduleData.decision === 'hold' ? (
+              <div className="space-y-4">
+                <NoActionPanel schedule={scheduleData} />
+                <div className="border border-border bg-surface-elevated/50 p-4">
+                  <h3 className="text-xs uppercase tracking-wider text-text-secondary">Scenario reasoning</h3>
+                  {scheduleData.explanation.length > 0 ? (
+                    <ul className="mt-3 space-y-2">
+                      {scheduleData.explanation.slice(0, 5).map((reason) => (
+                        <li key={reason} className="text-sm leading-relaxed text-text-secondary">- {reason}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-sm text-text-muted">No explanation returned.</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <RecommendationCards schedule={scheduleData} />
+            )}
             <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
               <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Impact Preview</h3>
               <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
