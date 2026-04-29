@@ -9,7 +9,7 @@ class BatteryOperatingProfile(BaseModel):
     capacity_mwh: float = Field(..., description="Usable battery capacity in MWh.")
     duration_hours: float = Field(..., description="Nominal full-power duration in hours.")
     round_trip_efficiency: float = Field(..., description="Round-trip efficiency fraction.")
-    max_cycles_per_day: int = Field(..., description="Maximum allowed cycles per day.")
+    max_cycles_per_day: float = Field(..., description="Maximum allowed cycles per day.")
     soc_min: float = Field(..., description="Minimum allowed state of charge fraction.")
     soc_max: float = Field(..., description="Maximum allowed state of charge fraction.")
     initial_soc: float = Field(..., description="Default starting state of charge fraction.")
@@ -25,6 +25,24 @@ class BatteryOperatingProfile(BaseModel):
     degradation_cost_eur_per_mwh: float = Field(
         ...,
         description="Estimated degradation cost per MWh in EUR.",
+    )
+    auxiliary_load_percent: float = Field(
+        0.0,
+        ge=0,
+        description=(
+            "Auxiliary load as a fraction of rated power, used for parasitic loads "
+            "such as cooling."
+        ),
+    )
+    ramp_rate_mw_per_interval: float | None = Field(
+        None,
+        gt=0,
+        description="Maximum allowed change in net power per forecast interval in MW.",
+    )
+    grid_connection_limit_mw: float | None = Field(
+        None,
+        gt=0,
+        description="Maximum grid interconnection power limit in MW.",
     )
 
 
@@ -82,6 +100,27 @@ BATTERY_PROFILES: dict[str, BatteryOperatingProfile] = {
         temperature_warning_c=32,
         temperature_avoid_c=42,
         degradation_cost_eur_per_mwh=4,
+    ),
+    "greece_100mw_300mwh": BatteryOperatingProfile(
+        name="greece_100mw_300mwh",
+        power_mw=100,
+        capacity_mwh=300,
+        duration_hours=3,
+        round_trip_efficiency=0.85,
+        max_cycles_per_day=1.5,
+        soc_min=0.1,
+        soc_max=0.9,
+        initial_soc=0.5,
+        target_terminal_soc=0.5,
+        min_action_duration_minutes=15,
+        max_action_duration_minutes=240,
+        min_rest_between_actions_minutes=15,
+        temperature_warning_c=30,
+        temperature_avoid_c=40,
+        degradation_cost_eur_per_mwh=20,
+        auxiliary_load_percent=0.02,
+        ramp_rate_mw_per_interval=100,
+        grid_connection_limit_mw=100,
     ),
 }
 

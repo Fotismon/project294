@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.schemas.schedule import Alert
+from app.schemas.schedule import Alert, DispatchDiagnostics
 from app.scheduling.recommendation import FinalRecommendation
 
 
@@ -288,6 +288,62 @@ def generate_alerts(
         + generate_soc_feasibility_alerts(recommendation)
         + generate_data_quality_alerts(data_quality_level)
     )
+    alerts.sort(key=lambda alert: SEVERITY_ORDER.get(alert.severity, 2))
+    return alerts
+
+
+def generate_dispatch_diagnostic_alerts(
+    diagnostics: DispatchDiagnostics,
+) -> list[AnalystAlert]:
+    alerts: list[AnalystAlert] = []
+
+    if diagnostics.simultaneous_action_violations > 0:
+        alerts.append(
+            AnalystAlert(
+                severity="critical",
+                title="Physical dispatch violation",
+                message="Schedule contains simultaneous charge and discharge intervals.",
+                recommended_action="Reject schedule or rerun optimization.",
+                metric="dispatch_diagnostics",
+            )
+        )
+
+    if not diagnostics.grid_connection_limit_ok:
+        alerts.append(
+            AnalystAlert(
+                severity="warning",
+                title="Grid connection limit exceeded",
+                message="Maximum grid power exceeds the configured interconnection limit.",
+                recommended_action="Derate dispatch or select a lower-power schedule.",
+                metric="dispatch_diagnostics",
+            )
+        )
+
+    if diagnostics.ramp_rate_violations > 0:
+        alerts.append(
+            AnalystAlert(
+                severity="warning",
+                title="Ramp-rate warning",
+                message="Schedule violates configured ramp-rate limits.",
+                recommended_action="Smooth dispatch or rerun with stricter constraints.",
+                metric="dispatch_diagnostics",
+            )
+        )
+
+    soc_violations = (
+        diagnostics.soc_min_violation_count + diagnostics.soc_max_violation_count
+    )
+    if soc_violations > 0:
+        alerts.append(
+            AnalystAlert(
+                severity="critical",
+                title="SoC limit violation",
+                message="Schedule trajectory violates configured SoC limits.",
+                recommended_action="Reject schedule or reduce dispatch energy.",
+                metric="dispatch_diagnostics",
+            )
+        )
+
     alerts.sort(key=lambda alert: SEVERITY_ORDER.get(alert.severity, 2))
     return alerts
 

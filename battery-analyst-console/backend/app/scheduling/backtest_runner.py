@@ -67,6 +67,7 @@ def run_lightweight_backtest(request: BacktestRequest) -> BacktestResponse:
     schedule_request = ScheduleRequest(
         date=request.date,
         profile_name=request.profile_name,
+        optimizer_mode=request.optimizer_mode,
         prices=forecast_prices,
         temperatures=actual_temperatures,
         forecast_uncertainty_width=avg_band_width,

@@ -4,6 +4,7 @@ from app.schemas.schedule import (
     Alert,
     AlternativeSchedule,
     BatteryStress,
+    DispatchDiagnostics,
     PhysicalConstraints,
     ScheduleResponse,
     SoCFeasibility,
@@ -11,11 +12,23 @@ from app.schemas.schedule import (
 )
 from app.scheduling.alerts import (
     convert_analyst_alert_to_schedule_alert,
+    generate_dispatch_diagnostic_alerts,
     generate_alerts,
 )
 from app.scheduling.constraints import filter_physical_constraints
+from app.scheduling.diagnostics import (
+    build_diagnostics_explanation_lines,
+    build_empty_dispatch_diagnostics,
+    compute_dispatch_diagnostics,
+)
+from app.scheduling.dispatch import (
+    build_dispatch_plan_from_windows,
+    select_profitable_dispatch_windows,
+)
 from app.scheduling.economics import filter_economic_schedules
+from app.scheduling.optimizer_metadata import optimizer_metadata_for_request
 from app.scheduling.pairing import pair_charge_discharge_windows
+from app.scheduling.profitability import build_hurdle_explanation_lines
 from app.scheduling.recommendation import (
     FinalRecommendation,
     RecommendedSchedule,
@@ -88,6 +101,10 @@ def run_scenario_analysis(request: ScenarioOverrideRequest) -> ScheduleResponse:
     # This endpoint uses the real internal scheduling pipeline for scenario analysis.
     # It is still an MVP and uses simplified expected value and feasibility calculations.
     windows = generate_rolling_windows(request.prices, request.temperatures)
+    _, v12_discharge_windows, v12_explanation = select_profitable_dispatch_windows(
+        windows=windows,
+        profile=profile,
+    )
     pairs = pair_charge_discharge_windows(
         charge_windows=windows,
         discharge_windows=windows,
@@ -127,6 +144,7 @@ def run_scenario_analysis(request: ScenarioOverrideRequest) -> ScheduleResponse:
         request=request,
         profile=profile,
         effective_margin=effective_margin,
+        dispatch_explanation=v12_explanation if v12_discharge_windows else [],
     )
 
 
@@ -135,6 +153,7 @@ def recommendation_to_schedule_response(
     request: ScenarioOverrideRequest,
     profile: BatteryOperatingProfile,
     effective_margin: float,
+    dispatch_explanation: list[str] | None = None,
 ) -> ScheduleResponse:
     """Convert an internal final recommendation into the public ScheduleResponse shape."""
 
@@ -143,6 +162,7 @@ def recommendation_to_schedule_response(
             request=request,
             profile=profile,
             recommendation=recommendation,
+            dispatch_explanation=dispatch_explanation,
         )
 
     selected = recommendation.selected
@@ -154,10 +174,23 @@ def recommendation_to_schedule_response(
     confidence = selected.confidence
 
     base_value = economic_schedule.net_spread_after_costs * soc_result.total_mwh_discharged
+    dispatch_plan = build_dispatch_plan_from_windows(
+        charge_windows=[candidate.charge_window],
+        discharge_windows=[candidate.discharge_window],
+        prices=request.prices,
+        profile=profile,
+    )
+    diagnostics = compute_dispatch_diagnostics(
+        charge_power_mw=dispatch_plan.charge_power_mw,
+        discharge_power_mw=dispatch_plan.discharge_power_mw,
+        soc_trajectory=dispatch_plan.soc_trajectory,
+        profile=profile,
+    )
     alerts = build_schedule_alerts(
         recommendation=recommendation,
         request=request,
         effective_margin=effective_margin,
+        diagnostics=diagnostics,
     )
 
     explanation = recommendation.explanation + [
@@ -165,12 +198,20 @@ def recommendation_to_schedule_response(
             f"Scenario used profile '{request.profile_name}' with risk appetite "
             f"'{request.risk_appetite}'."
         )
-    ]
+    ] + build_hurdle_explanation_lines(
+        charge_price=candidate.charge_window.avg_price,
+        discharge_price=candidate.discharge_window.avg_price,
+        round_trip_efficiency=profile.round_trip_efficiency,
+        degradation_cost_eur_per_mwh=profile.degradation_cost_eur_per_mwh,
+    ) + build_diagnostics_explanation_lines(diagnostics) + (
+        dispatch_explanation or []
+    )
 
     return ScheduleResponse(
         date=request.date,
         decision=recommendation.decision,
         confidence=confidence.level,
+        optimizer=optimizer_metadata_for_request(request.optimizer_mode),
         charge_window=Window(
             start=candidate.charge_window.start,
             end=candidate.charge_window.end,
@@ -206,6 +247,7 @@ def recommendation_to_schedule_response(
             round_trip_efficiency_applied=True,
             rapid_switching_avoided=not stress.rapid_switching_risk,
         ),
+        diagnostics=diagnostics,
         alternatives=[
             recommended_to_alternative(index, alternative)
             for index, alternative in enumerate(recommendation.alternatives, start=1)
@@ -253,21 +295,25 @@ def hold_schedule_response(
     request: ScenarioOverrideRequest,
     profile: BatteryOperatingProfile,
     recommendation: FinalRecommendation,
+    dispatch_explanation: list[str] | None = None,
 ) -> ScheduleResponse:
     """Build a hold ScheduleResponse when no selected schedule exists."""
 
     hold_reasons = recommendation.hold_reasons or ["No feasible schedule found."]
     placeholder_window = Window(start="00:00", end="00:00", avg_price=0.0)
+    diagnostics = build_empty_dispatch_diagnostics(profile)
     alerts = build_schedule_alerts(
         recommendation=recommendation,
         request=request,
         effective_margin=None,
+        diagnostics=diagnostics,
     )
 
     return ScheduleResponse(
         date=request.date,
         decision="hold",
         confidence="low",
+        optimizer=optimizer_metadata_for_request(request.optimizer_mode),
         charge_window=placeholder_window,
         discharge_window=placeholder_window,
         spread_after_efficiency=0.0,
@@ -292,9 +338,21 @@ def hold_schedule_response(
             round_trip_efficiency_applied=True,
             rapid_switching_avoided=True,
         ),
+        diagnostics=diagnostics,
         alternatives=[],
         alerts=alerts,
-        explanation=recommendation.explanation,
+        explanation=recommendation.explanation
+        + [
+            (
+                "Hurdle-cost check did not identify an executable spread after "
+                "efficiency and degradation cost."
+            )
+        ]
+        + build_diagnostics_explanation_lines(diagnostics)
+        + (
+            dispatch_explanation
+            or ["No profitable multi-dispatch plan cleared the hurdle-cost check."]
+        ),
     )
 
 
@@ -302,6 +360,7 @@ def build_schedule_alerts(
     recommendation: FinalRecommendation,
     request: ScenarioOverrideRequest,
     effective_margin: float | None,
+    diagnostics: DispatchDiagnostics | None = None,
 ) -> list[Alert]:
     """Build generated analyst alerts followed by scenario metadata alerts."""
 
@@ -309,6 +368,11 @@ def build_schedule_alerts(
         recommendation=recommendation,
         forecast_uncertainty_width=request.forecast_uncertainty_width,
         data_quality_level=request.data_quality_level,
+    )
+    analyst_alerts = analyst_alerts + (
+        generate_dispatch_diagnostic_alerts(diagnostics)
+        if diagnostics is not None
+        else []
     )
     schedule_alerts = [
         convert_analyst_alert_to_schedule_alert(alert)

@@ -1,11 +1,15 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.schedule import ScheduleResponse
+from app.schemas.schedule import OptimizerMode, ScheduleResponse
 
 
 class BacktestRequest(BaseModel):
     date: str = Field(..., description="Historical backtest date in YYYY-MM-DD format.")
     profile_name: str = Field("balanced", description="Battery operating profile name.")
+    optimizer_mode: OptimizerMode = Field(
+        "window_v1",
+        description="Optimizer mode to use for the scheduled recommendation inside the backtest.",
+    )
     lookback_days: int = Field(
         7,
         ge=1,
@@ -28,6 +32,7 @@ class BacktestRequest(BaseModel):
             "example": {
                 "date": "2026-04-29",
                 "profile_name": "balanced",
+                "optimizer_mode": "window_v1",
                 "lookback_days": 7,
                 "forecast_method": "lookback_average",
                 "market_volatility": "medium",

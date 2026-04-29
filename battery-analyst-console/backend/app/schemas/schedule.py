@@ -1,4 +1,31 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
+
+OptimizerMode = Literal["window_v1", "milp", "auto"]
+
+
+class OptimizerMetadata(BaseModel):
+    requested_mode: str = Field(..., description="Optimizer mode requested by the client.")
+    used_mode: str = Field(
+        ...,
+        description="Optimizer mode actually used to generate the result.",
+    )
+    fallback_used: bool = Field(False, description="Whether fallback behavior was used.")
+    fallback_reason: str | None = Field(
+        None,
+        description="Reason fallback was used, if applicable.",
+    )
+    model_version: str = Field(
+        ...,
+        description="Version label for the optimizer implementation.",
+    )
+    is_optimal: bool = Field(False, description="Whether the result is mathematically optimal.")
+    solver_status: str | None = Field(
+        None,
+        description="Solver status for optimizer-backed results.",
+    )
 
 
 class BatteryProfile(BaseModel):
@@ -35,6 +62,10 @@ class BatteryProfile(BaseModel):
 class ScheduleRequest(BaseModel):
     date: str = Field(..., description="Schedule date in YYYY-MM-DD format.")
     profile_name: str = Field("balanced", description="Battery operating profile name.")
+    optimizer_mode: OptimizerMode = Field(
+        "window_v1",
+        description="Optimizer mode to use: window_v1, milp, or auto.",
+    )
     prices: list[float] | None = Field(
         None,
         min_length=96,
@@ -71,6 +102,7 @@ class ScheduleRequest(BaseModel):
             "example": {
                 "date": "2026-04-29",
                 "profile_name": "balanced",
+                "optimizer_mode": "window_v1",
                 "prices": [80.0] * 44 + [35.0] * 8 + [80.0] * 28 + [120.0] * 8 + [80.0] * 8,
                 "temperatures": [25.0] * 80 + [31.0] * 8 + [25.0] * 8,
                 "forecast_confidence": "medium_high",
@@ -127,6 +159,55 @@ class PhysicalConstraints(BaseModel):
     )
 
 
+class DispatchDiagnostics(BaseModel):
+    total_mwh_charged: float = Field(..., description="Total scheduled charged energy in MWh.")
+    total_mwh_discharged: float = Field(
+        ...,
+        description="Total scheduled discharged energy in MWh.",
+    )
+    equivalent_full_cycles: float = Field(
+        ...,
+        description="Equivalent full cycles, computed as discharged MWh / nominal capacity MWh.",
+    )
+    auxiliary_load_mw: float = Field(
+        ...,
+        description="Auxiliary/parasitic load in MW, such as cooling load.",
+    )
+    auxiliary_energy_mwh: float = Field(
+        ...,
+        description="Auxiliary energy consumed during active delivery windows in MWh.",
+    )
+    simultaneous_action_violations: int = Field(
+        ...,
+        description="Number of intervals with both charge and discharge active.",
+    )
+    max_grid_power_mw: float = Field(
+        ...,
+        description="Maximum absolute grid power observed in MW.",
+    )
+    grid_connection_limit_mw: float = Field(..., description="Grid connection limit in MW.")
+    grid_connection_limit_ok: bool = Field(
+        ...,
+        description="Whether max grid power respects the grid connection limit.",
+    )
+    terminal_soc_error: float = Field(
+        ...,
+        description="Absolute difference between end SoC and target terminal SoC.",
+    )
+    soc_min_violation_count: int = Field(
+        ...,
+        description="Number of intervals below minimum SoC.",
+    )
+    soc_max_violation_count: int = Field(
+        ...,
+        description="Number of intervals above maximum SoC.",
+    )
+    ramp_rate_violations: int = Field(
+        ...,
+        description="Number of intervals violating ramp-rate limit.",
+    )
+
+
 class Alert(BaseModel):
     level: str = Field(..., description="Alert severity level.")
     message: str = Field(..., description="Human-readable alert message.")
@@ -148,6 +229,10 @@ class ScheduleResponse(BaseModel):
     date: str = Field(..., description="Schedule date in YYYY-MM-DD format.")
     decision: str = Field(..., description="Recommended action for the schedule.")
     confidence: str = Field(..., description="Confidence level for the recommendation.")
+    optimizer: OptimizerMetadata = Field(
+        ...,
+        description="Optimizer metadata for this recommendation.",
+    )
     charge_window: Window = Field(..., description="Recommended charging window.")
     discharge_window: Window = Field(..., description="Recommended discharging window.")
     spread_after_efficiency: float = Field(
@@ -163,6 +248,10 @@ class ScheduleResponse(BaseModel):
     physical_constraints: PhysicalConstraints = Field(
         ...,
         description="Physical constraint checks for the schedule.",
+    )
+    diagnostics: DispatchDiagnostics = Field(
+        ...,
+        description="Physical dispatch diagnostics for the generated schedule.",
     )
     alternatives: list[AlternativeSchedule] = Field(
         default_factory=list,
@@ -180,6 +269,15 @@ class ScheduleResponse(BaseModel):
                 "date": "2026-04-29",
                 "decision": "execute_with_caution",
                 "confidence": "medium_high",
+                "optimizer": {
+                    "requested_mode": "window_v1",
+                    "used_mode": "window_v1",
+                    "fallback_used": False,
+                    "fallback_reason": None,
+                    "model_version": "window_v1.2",
+                    "is_optimal": False,
+                    "solver_status": None,
+                },
                 "charge_window": {
                     "start": "11:00",
                     "end": "13:00",
@@ -215,6 +313,21 @@ class ScheduleResponse(BaseModel):
                     "temperature_ok": True,
                     "round_trip_efficiency_applied": True,
                     "rapid_switching_avoided": True,
+                },
+                "diagnostics": {
+                    "total_mwh_charged": 100.0,
+                    "total_mwh_discharged": 100.0,
+                    "equivalent_full_cycles": 0.3333,
+                    "auxiliary_load_mw": 2.0,
+                    "auxiliary_energy_mwh": 2.0,
+                    "simultaneous_action_violations": 0,
+                    "max_grid_power_mw": 100.0,
+                    "grid_connection_limit_mw": 100.0,
+                    "grid_connection_limit_ok": True,
+                    "terminal_soc_error": 0.0351,
+                    "soc_min_violation_count": 0,
+                    "soc_max_violation_count": 0,
+                    "ramp_rate_violations": 0,
                 },
                 "alternatives": [],
                 "alerts": [],

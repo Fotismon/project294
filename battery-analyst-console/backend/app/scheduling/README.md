@@ -17,3 +17,43 @@ Task 8.2 wires generated analyst alerts into `/scenario`, alongside scenario met
 `schedule_runner.py` connects the same internal pipeline to `/schedule` using caller-provided 96-interval forecast prices until the forecast engine is integrated.
 
 `/scenario` now includes no-go day, forecast uncertainty, temperature risk, weak spread, SoC feasibility, data quality, and scenario metadata alerts. These alerts are analyst warnings, not external notifications. This is not a full simulator or degradation model: it does not model nonlinear battery behavior, aging curves, thermal capacity effects, ramp rates, or execution uncertainty.
+
+## Profitability / hurdle-cost check
+
+The profitability helper explains the hurdle price that a discharge window must clear after efficiency and degradation cost:
+
+```text
+energy_input_required_mwh = 1 / round_trip_efficiency
+rte_adjusted_charge_cost = charge_price / round_trip_efficiency
+total_hurdle_cost = rte_adjusted_charge_cost + degradation_cost_eur_per_mwh
+net_profit = discharge_price - total_hurdle_cost
+```
+
+For RTE 0.85, charge 30 €/MWh, and degradation 20 €/MWh:
+
+- 80 €/MWh discharge yields 24.71 €/MWh net profit.
+- 120 €/MWh discharge yields 64.71 €/MWh net profit.
+
+## Window Scheduler V1.2
+
+The window scheduler now has an interval-level dispatch representation with
+`charge_power_mw[96]`, `discharge_power_mw[96]`, `net_power_mw[96]`, and
+`soc_trajectory[97]`. Dispatch blocks are extracted from these vectors so the
+same shape can later describe MILP output.
+
+V1.2 can identify multiple profitable discharge windows using the hurdle-cost
+profitability check while keeping the public `charge_window` and
+`discharge_window` fields for frontend compatibility. The primary response
+windows represent the lowest-price charge block and highest-price discharge
+block; additional selected dispatch blocks are described in explanation lines.
+
+## Dispatch diagnostics
+
+Schedule and scenario responses include physical dispatch diagnostics for the
+window scheduler. The diagnostics report equivalent full cycles, auxiliary load
+and auxiliary energy, simultaneous charge/discharge violations, grid connection
+limit checks, terminal SoC error, SoC violation counts, and ramp-rate
+violations.
+
+These judge-facing metrics are computed for the current window scheduler and
+use the same dispatch-vector shape that future MILP output can populate.
