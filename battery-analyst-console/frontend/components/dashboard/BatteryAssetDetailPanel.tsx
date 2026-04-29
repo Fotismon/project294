@@ -61,7 +61,39 @@ function effectiveAction(asset: BatteryAsset): EffectiveBatteryAction {
   return asset.selected_action === 'auto' ? asset.auto_action : asset.selected_action
 }
 
-function buildWarnings(asset: BatteryAsset, schedule: ScheduleResponse): string[] {
+function recommendedAction(asset: BatteryAsset, schedule: ScheduleResponse): EffectiveBatteryAction {
+  if (schedule.decision === 'hold') return 'idle'
+  if (asset.status === 'offline') return 'idle'
+  return effectiveAction(asset)
+}
+
+function buildAssetRecommendationReasons(asset: BatteryAsset, schedule: ScheduleResponse): string[] {
+  const reasons = [
+    `Fleet-level decision is ${actionLabel(schedule.decision)} with ${actionLabel(schedule.confidence)} confidence.`
+  ]
+
+  if (schedule.decision === 'hold') {
+    reasons.push('The fleet-level recommendation is hold, so this asset should remain idle unless an operator overrides the schedule.')
+  } else {
+    reasons.push(`Recommended charge window is ${formatWindow(schedule.charge_window.start, schedule.charge_window.end)} at ${schedule.charge_window.avg_price} €/MWh.`)
+    reasons.push(`Recommended discharge window is ${formatWindow(schedule.discharge_window.start, schedule.discharge_window.end)} at ${schedule.discharge_window.avg_price} €/MWh.`)
+    reasons.push(`Spread after efficiency is ${schedule.spread_after_efficiency.toFixed(1)} €/MWh.`)
+  }
+
+  reasons.push(`Asset SoC is ${formatPercent(asset.soc)}.`)
+  reasons.push(`Asset stress level is ${asset.stress_level}.`)
+  reasons.push(schedule.soc_feasibility.feasible ? 'Schedule SoC feasibility is satisfied.' : 'Schedule SoC feasibility has violations.')
+
+  if (asset.temperature_c >= 30) reasons.push('Temperature is elevated.')
+  if (asset.status === 'offline') reasons.push('Asset is offline.')
+  if (asset.selected_action !== 'auto' && asset.selected_action !== asset.auto_action) {
+    reasons.push('Manual override differs from automatic recommendation.')
+  }
+
+  return Array.from(new Set(reasons)).slice(0, 6)
+}
+
+function buildAssetWarnings(asset: BatteryAsset, schedule: ScheduleResponse): string[] {
   const warnings = [...asset.constraint_warnings]
 
   if (asset.selected_action !== 'auto' && asset.selected_action !== asset.auto_action) {
@@ -73,13 +105,15 @@ function buildWarnings(asset: BatteryAsset, schedule: ScheduleResponse): string[
   }
 
   if (asset.temperature_c >= 30) {
-    warnings.push(`Asset temperature is ${asset.temperature_c} °C; monitor thermal risk before dispatch.`)
+    warnings.push(`Temperature warning: asset is at ${asset.temperature_c}°C.`)
   }
 
-  schedule.alerts
-    .filter((alert) => alert.severity === 'critical' || alert.severity === 'warning')
-    .slice(0, 2)
-    .forEach((alert) => warnings.push(`${alert.title}: ${alert.message}`))
+  if (!schedule.physical_constraints.duration_ok) warnings.push('Duration constraint failed.')
+  if (!schedule.physical_constraints.cycle_limit_ok) warnings.push('Cycle limit constraint failed.')
+  if (!schedule.physical_constraints.temperature_ok) warnings.push('Temperature constraint failed.')
+  if (!schedule.physical_constraints.rapid_switching_avoided) warnings.push('Rapid switching was not avoided.')
+
+  schedule.soc_feasibility.violations.forEach((violation) => warnings.push(violation))
 
   return Array.from(new Set(warnings))
 }
@@ -106,9 +140,12 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
   }
 
   const assetEffectiveAction = effectiveAction(asset)
-  const warnings = buildWarnings(asset, schedule)
+  const assetRecommendedAction = recommendedAction(asset, schedule)
+  const recommendationReasons = buildAssetRecommendationReasons(asset, schedule)
+  const warnings = buildAssetWarnings(asset, schedule)
   const scheduleHold = schedule.decision === 'hold'
-  const stressReasons = schedule.battery_stress.reasons.slice(0, 3)
+  const stressReasons = schedule.battery_stress.reasons.slice(0, 5)
+  const socViolations = schedule.soc_feasibility.violations.slice(0, 3)
 
   return (
     <SectionPanel
@@ -146,7 +183,15 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
 
         <DetailBlock title="Recommended Action">
           <div className="space-y-3">
-            <p className="text-sm font-medium text-text-primary">Recommended asset action: {actionLabel(asset.status === 'offline' ? 'idle' : asset.auto_action)}</p>
+            {scheduleHold && (
+              <div className="border border-warning/30 bg-warning/10 p-3">
+                <p className="text-sm font-medium text-warning">No action for this asset</p>
+                <p className="mt-1 text-sm text-text-secondary">
+                  {schedule.explanation[0] || 'Forecasted spread does not compensate for round-trip efficiency losses and degradation risk.'}
+                </p>
+              </div>
+            )}
+            <p className="text-sm font-medium text-text-primary">Recommended asset action: {actionLabel(assetRecommendedAction)}</p>
             <div className="flex flex-wrap gap-2">
               <StatusBadge label={`Auto: ${actionLabel(asset.auto_action)}`} tone={actionTone(asset.auto_action)} dot />
               <StatusBadge label={`Selected: ${actionLabel(asset.selected_action)}`} tone={actionTone(asset.selected_action)} />
@@ -158,6 +203,17 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
             {asset.status === 'offline' && (
               <p className="text-sm text-error">Offline asset should remain idle unless an operator explicitly overrides the schedule.</p>
             )}
+          </div>
+        </DetailBlock>
+
+        <DetailBlock title="Why This Action?">
+          <div className="space-y-3">
+            <p className="text-sm text-text-secondary">Main reason: {recommendationReasons[0]}</p>
+            <ul className="space-y-1">
+              {recommendationReasons.slice(1).map((reason) => (
+                <li key={reason} className="text-sm text-text-secondary">- {reason}</li>
+              ))}
+            </ul>
           </div>
         </DetailBlock>
 
@@ -194,12 +250,47 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
           </div>
         </DetailBlock>
 
-        <DetailBlock title="Fleet Schedule Stress Context">
+        <DetailBlock title="SoC Feasibility Summary">
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge label={schedule.soc_feasibility.feasible ? 'Feasible' : 'Not feasible'} tone={schedule.soc_feasibility.feasible ? 'positive' : 'critical'} dot />
+              <StatusBadge label={`${schedule.soc_feasibility.violations.length} violation${schedule.soc_feasibility.violations.length === 1 ? '' : 's'}`} tone={schedule.soc_feasibility.violations.length > 0 ? 'warning' : 'positive'} />
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-text-muted">Start SoC</p>
+                <p className="text-text-primary">{formatPercent(schedule.soc_feasibility.start_soc)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wider text-text-muted">End SoC</p>
+                <p className="text-text-primary">{formatPercent(schedule.soc_feasibility.end_soc)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wider text-text-muted">Allowed range</p>
+                <p className="text-text-primary">{formatPercent(schedule.soc_feasibility.min_soc)}-{formatPercent(schedule.soc_feasibility.max_soc)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wider text-text-muted">Violations</p>
+                <p className="text-text-primary">{schedule.soc_feasibility.violations.length}</p>
+              </div>
+            </div>
+            {socViolations.length > 0 && (
+              <ul className="space-y-1">
+                {socViolations.map((violation) => (
+                  <li key={violation} className="text-sm text-error">- {violation}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </DetailBlock>
+
+        <DetailBlock title="Battery Stress Reasons">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <StressBadge level={asset.stress_level} />
-              <StatusBadge label={`Schedule score ${schedule.battery_stress.score}`} tone={schedule.battery_stress.level === 'high' ? 'critical' : schedule.battery_stress.level === 'medium' ? 'warning' : 'positive'} />
+              <StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} />
+              <StatusBadge label={`Asset stress marker: ${asset.stress_level}`} tone={asset.stress_level === 'high' ? 'critical' : asset.stress_level === 'medium' ? 'warning' : 'positive'} />
             </div>
+            <p className="text-xs text-text-muted">Schedule-level stress context. Asset stress is a fleet table marker until per-asset backend stress scoring is implemented.</p>
             {stressReasons.length > 0 ? (
               <ul className="space-y-1">
                 {stressReasons.map((reason) => (
@@ -212,7 +303,7 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
           </div>
         </DetailBlock>
 
-        <DetailBlock title="Warnings">
+        <DetailBlock title="Constraint Warnings">
           {warnings.length > 0 ? (
             <ul className="space-y-1">
               {warnings.map((warning) => (
@@ -222,6 +313,12 @@ export function BatteryAssetDetailPanel({ asset, schedule, onClose }: BatteryAss
           ) : (
             <p className="text-sm text-text-secondary">No asset-level warnings.</p>
           )}
+        </DetailBlock>
+
+        <DetailBlock title="Fleet-Level Decision → Asset Impact">
+          <p className="text-sm leading-relaxed text-text-secondary">
+            The fleet recommendation is mapped to this battery using the current asset state, selected action, stress marker, and schedule constraints. Per-asset optimization is approximated in the frontend until fleet-level scheduling is implemented in the backend.
+          </p>
         </DetailBlock>
       </div>
     </SectionPanel>
