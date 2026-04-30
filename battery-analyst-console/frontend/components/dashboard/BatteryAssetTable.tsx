@@ -89,7 +89,7 @@ export function BatteryAssetTable({
         <table className="w-full min-w-[1120px] text-left text-sm">
           <thead className="border-b border-border bg-surface text-xs uppercase tracking-wider text-text-muted">
             <tr>
-              <th className="w-10 px-2 py-2.5">Select</th>
+              <th className="w-10 px-2 py-2.5">Bulk</th>
               <th className="px-2 py-2.5">Asset</th>
               <th className="px-2 py-2.5">Site</th>
               <th className="px-2 py-2.5">Status</th>
@@ -112,25 +112,39 @@ export function BatteryAssetTable({
               const warningCount = asset.constraint_warnings.length
               const firstWarning = asset.constraint_warnings[0]
               const detailEnabled = Boolean(onOpenAssetDetail)
+              const openDetail = () => onOpenAssetDetail?.(asset.id)
 
               return (
                 <tr
                   key={asset.id}
+                  onClick={openDetail}
                   className={`border-l-2 transition hover:bg-surface ${
                     detailSelected ? 'border-info bg-info/5' : isManual ? 'border-transparent bg-warning/5' : 'border-transparent'
-                  }`}
+                  } ${detailEnabled ? 'cursor-pointer' : ''}`}
                 >
-                  <td className="px-2 py-2.5 align-top">
+                  <td className="px-2 py-2.5 align-top" onClick={(event) => event.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selected}
-                      onChange={() => onToggleSelected(asset.id)}
+                      onChange={() => {
+                        onToggleSelected(asset.id)
+                        openDetail()
+                      }}
                       className="h-4 w-4 accent-info"
-                      aria-label={`Select ${asset.name}`}
+                      aria-label={`Bulk select ${asset.name}`}
                     />
                   </td>
                   <td className="px-2 py-2.5 align-top">
-                    <div className="font-medium text-text-primary">{asset.name}</div>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openDetail()
+                      }}
+                      className="text-left font-medium text-text-primary hover:text-info"
+                    >
+                      {asset.name}
+                    </button>
                     <div className="mt-0.5 text-xs text-text-muted">{asset.id}</div>
                   </td>
                   <td className="px-2 py-2.5 align-top text-text-secondary">{asset.site}</td>
@@ -156,7 +170,7 @@ export function BatteryAssetTable({
                   <td className="px-2 py-2.5 align-top">
                     <StatusBadge label={actionLabel(asset.auto_action)} tone={actionTone(asset.auto_action)} dot />
                   </td>
-                  <td className="px-2 py-2.5 align-top">
+                  <td className="px-2 py-2.5 align-top" onClick={(event) => event.stopPropagation()}>
                     <div className="min-w-28">
                       <BatteryActionSelector
                         value={asset.selected_action}
@@ -186,7 +200,10 @@ export function BatteryAssetTable({
                     <button
                       type="button"
                       disabled={!detailEnabled}
-                      onClick={() => onOpenAssetDetail?.(asset.id)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openDetail()
+                      }}
                       title={detailEnabled ? `Open ${asset.name}` : 'Asset detail unavailable'}
                       className={`border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:text-text-muted ${
                         detailSelected

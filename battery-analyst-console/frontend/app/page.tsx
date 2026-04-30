@@ -105,6 +105,33 @@ function effectiveAction(asset: BatteryAsset): EffectiveBatteryAction {
   return asset.selected_action === 'auto' ? asset.auto_action : asset.selected_action
 }
 
+function allocateScheduleValueToAssets(
+  assets: BatteryAsset[],
+  schedule: ScheduleResponse | null
+): BatteryAsset[] {
+  const fleetValue = schedule?.fleet_economics?.fleet_expected_value_range_eur
+  if (!fleetValue || fleetValue.length < 2) return assets
+
+  const activeAssets = assets.filter((asset) => asset.status !== 'offline')
+  const totalActivePower = activeAssets.reduce((sum, asset) => sum + asset.power_mw, 0)
+  if (totalActivePower <= 0) return assets
+
+  return assets.map((asset) => {
+    if (asset.status === 'offline') {
+      return { ...asset, expected_value_eur: [0, 0] }
+    }
+
+    const share = asset.power_mw / totalActivePower
+    return {
+      ...asset,
+      expected_value_eur: [
+        Math.round((fleetValue[0] ?? 0) * share),
+        Math.round((fleetValue[1] ?? fleetValue[0] ?? 0) * share)
+      ]
+    }
+  })
+}
+
 function calculateFleetSummary(assets: BatteryAsset[]): FleetSummary {
   const totalCapacity = assets.reduce((sum, asset) => sum + asset.capacity_mwh, 0)
   const totalPower = assets.reduce((sum, asset) => sum + asset.power_mw, 0)
@@ -190,17 +217,21 @@ export default function Home() {
   const [backtestCoverage, setBacktestCoverage] = useState<BacktestCoverage | null>(null)
   const [isBacktestRunning, setIsBacktestRunning] = useState(false)
 
-  const fleetSummary = useMemo(() => calculateFleetSummary(fleetAssets), [fleetAssets])
-  const fleetRecommendation = useMemo(() => calculateFleetRecommendation(fleetAssets, fleetSummary), [fleetAssets, fleetSummary])
+  const displayFleetAssets = useMemo(
+    () => allocateScheduleValueToAssets(fleetAssets, scheduleData),
+    [fleetAssets, scheduleData]
+  )
+  const fleetSummary = useMemo(() => calculateFleetSummary(displayFleetAssets), [displayFleetAssets])
+  const fleetRecommendation = useMemo(() => calculateFleetRecommendation(displayFleetAssets, fleetSummary), [displayFleetAssets, fleetSummary])
   const selectedAsset = useMemo(
-    () => fleetAssets.find((asset) => asset.id === selectedAssetId) ?? null,
-    [fleetAssets, selectedAssetId]
+    () => displayFleetAssets.find((asset) => asset.id === selectedAssetId) ?? null,
+    [displayFleetAssets, selectedAssetId]
   )
   const stressDistribution = useMemo(() => ({
-    low: fleetAssets.filter((asset) => asset.stress_level === 'low').length,
-    medium: fleetAssets.filter((asset) => asset.stress_level === 'medium').length,
-    high: fleetAssets.filter((asset) => asset.stress_level === 'high').length
-  }), [fleetAssets])
+    low: displayFleetAssets.filter((asset) => asset.stress_level === 'low').length,
+    medium: displayFleetAssets.filter((asset) => asset.stress_level === 'medium').length,
+    high: displayFleetAssets.filter((asset) => asset.stress_level === 'high').length
+  }), [displayFleetAssets])
 
   useEffect(() => {
     let mounted = true
@@ -281,6 +312,7 @@ export default function Home() {
 
   function handleToggleSelected(id: string) {
     setSelectedAssetIds((current) => current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id])
+    setSelectedAssetId(id)
   }
 
   function handleAssetActionChange(id: string, action: BatteryAction) {
@@ -289,6 +321,11 @@ export default function Home() {
 
   function handleApplyBulkAction(action: BatteryAction) {
     setFleetAssets((current) => current.map((asset) => selectedAssetIds.includes(asset.id) ? { ...asset, selected_action: action } : asset))
+  }
+
+  function handleClearSelection() {
+    setSelectedAssetIds([])
+    setSelectedAssetId(null)
   }
 
   async function handleRunScenario() {
@@ -455,15 +492,15 @@ export default function Home() {
           <FleetOverview
             schedule={scheduleData}
             forecastData={forecastData}
-            fleetAssets={fleetAssets}
+            fleetAssets={displayFleetAssets}
             alerts={alerts}
             fleetSummary={fleetSummary}
             fleetRecommendation={fleetRecommendation}
             selectedAssetIds={selectedAssetIds}
             selectedAssetId={selectedAssetId}
             selectedAsset={selectedAsset}
-            onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
-            onClearSelection={() => setSelectedAssetIds([])}
+            onSelectAll={() => setSelectedAssetIds(displayFleetAssets.map((asset) => asset.id))}
+            onClearSelection={handleClearSelection}
             onToggleSelected={handleToggleSelected}
             onApplyAction={handleApplyBulkAction}
             onAssetActionChange={handleAssetActionChange}
@@ -480,12 +517,12 @@ export default function Home() {
           <div className="space-y-6">
             <SectionHeader title="Battery Assets" subtitle="Asset-level controls, status, and operating decisions." />
             <FleetManagerSection
-              assets={fleetAssets}
+              assets={displayFleetAssets}
               summary={fleetSummary}
               selectedIds={selectedAssetIds}
               selectedAssetId={selectedAssetId}
-              onSelectAll={() => setSelectedAssetIds(fleetAssets.map((asset) => asset.id))}
-              onClearSelection={() => setSelectedAssetIds([])}
+              onSelectAll={() => setSelectedAssetIds(displayFleetAssets.map((asset) => asset.id))}
+              onClearSelection={handleClearSelection}
               onToggleSelected={handleToggleSelected}
               onApplyAction={handleApplyBulkAction}
               onAssetActionChange={handleAssetActionChange}
@@ -569,7 +606,7 @@ export default function Home() {
             <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
               <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Impact Preview</h3>
               <div className="grid grid-cols-2 gap-3 text-sm xl:grid-cols-5">
-                <PreviewItem label="Assets Affected" value={fleetAssets.length} />
+                <PreviewItem label="Assets Affected" value={displayFleetAssets.length} />
                 <PreviewItem label="Fleet Value" value={`€${fleetSummary.expected_value_eur[0]}-€${fleetSummary.expected_value_eur[1]}`} />
                 <PreviewItem label="Stress Low/Med/High" value={`${stressDistribution.low}/${stressDistribution.medium}/${stressDistribution.high}`} />
                 <PreviewItem label="Charge/Discharge/Idle" value={`${fleetSummary.assets_charging}/${fleetSummary.assets_discharging}/${fleetSummary.assets_idle}`} />
@@ -596,7 +633,7 @@ export default function Home() {
         {activeSection === 'alerts' && (
           <div className="space-y-6">
             <SectionHeader title="Alerts" subtitle="Operational risks from the latest schedule or scenario." />
-            <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />
+            <FleetAlertsPanel alerts={alerts} assets={displayFleetAssets} />
           </div>
         )}
 
@@ -611,7 +648,7 @@ export default function Home() {
               onRunBacktest={handleRunBacktest}
               isRunning={isBacktestRunning}
               result={backtestResult}
-              assets={fleetAssets}
+              assets={displayFleetAssets}
               coverage={backtestCoverage}
             />
           </div>
