@@ -213,12 +213,28 @@ export interface ForecastPoint {
   lower_bound?: number
   upper_bound?: number
   confidence?: string
+  shap_explanation?: ShapSlotExplanation | null
   p10_price: number
   p50_price: number
   p90_price: number
   actual_price: number | null
   action: 'charge' | 'discharge' | 'hold'
   soc: number
+}
+
+export interface ShapFeatureContribution {
+  feature: string
+  contribution_eur_per_mwh: number
+  direction: 'up' | 'down' | string
+}
+
+export interface ShapSlotExplanation {
+  source: string
+  explanation_date: string
+  confidence_score: number | null
+  actual_price_eur_per_mwh: number | null
+  model_price_eur_per_mwh: number | null
+  top_contributions: ShapFeatureContribution[]
 }
 
 export interface ScheduleResponse {
@@ -380,6 +396,10 @@ export interface BackendForecastPoint {
   lower_bound: number
   upper_bound: number
   confidence: string
+  confidence_score?: number
+  arbitrage_signal?: number
+  risk_adjusted_price?: number
+  shap_explanation?: ShapSlotExplanation | null
 }
 
 export interface BackendForecastResponse {

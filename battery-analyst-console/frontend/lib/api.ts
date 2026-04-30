@@ -188,6 +188,11 @@ function mapForecast(response: BackendForecastResponse): ForecastPoint[] {
       p10_price: point.lower_bound,
       p50_price: point.predicted_price,
       p90_price: point.upper_bound,
+      predicted_price: point.predicted_price,
+      lower_bound: point.lower_bound,
+      upper_bound: point.upper_bound,
+      confidence: point.confidence,
+      shap_explanation: point.shap_explanation ?? null,
       actual_price: null,
       action: 'hold',
       soc: 0.5

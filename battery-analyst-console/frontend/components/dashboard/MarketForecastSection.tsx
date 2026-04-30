@@ -104,11 +104,28 @@ function LegendItem({ label, className }: { label: string; className: string }) 
   )
 }
 
+function topDriverSlots(points: ForecastPoint[]): ForecastPoint[] {
+  return [...points]
+    .filter((point) => point.shap_explanation?.top_contributions?.length)
+    .sort((left, right) => right.p50_price - left.p50_price)
+    .slice(0, 3)
+}
+
+function formatTime(timestamp: string): string {
+  return new Date(timestamp).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/Athens'
+  })
+}
+
 export function MarketForecastSection({ forecastData, schedule }: MarketForecastSectionProps) {
   const hasChargeWindow = isExecutableWindow(schedule.charge_window)
   const hasDischargeWindow = isExecutableWindow(schedule.discharge_window)
   const hasTradeWindows = hasChargeWindow && hasDischargeWindow
   const currentSignal = signalFromSchedule(schedule, hasTradeWindows)
+  const driverSlots = topDriverSlots(forecastData)
 
   return (
     <SectionPanel
@@ -162,6 +179,46 @@ export function MarketForecastSection({ forecastData, schedule }: MarketForecast
           <p className="text-xs uppercase tracking-wider text-text-muted">Operating rationale</p>
           <p className="mt-1 text-sm leading-relaxed text-text-primary">{operatingReason(schedule, hasTradeWindows)}</p>
         </div>
+
+        {driverSlots.length > 0 && (
+          <div className="border border-border bg-surface px-3 py-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-text-muted">Forecast drivers from SHAP</p>
+                <p className="mt-1 text-sm text-text-secondary">
+                  Top LightGBM feature contributions for the highest-price forecast slots.
+                </p>
+              </div>
+              <StatusBadge
+                label={driverSlots[0]?.shap_explanation?.source === 'historical_shap_slot_proxy' ? 'Historical slot proxy' : 'Historical SHAP'}
+                tone="info"
+              />
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+              {driverSlots.map((point) => (
+                <div key={point.timestamp} className="border border-border bg-surface-elevated/50 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-text-primary">{formatTime(point.timestamp)}</p>
+                      <p className="text-xs text-text-muted">{point.p50_price.toFixed(1)} EUR/MWh forecast</p>
+                    </div>
+                    <StatusBadge label={point.confidence ?? 'confidence'} tone="neutral" />
+                  </div>
+                  <ul className="mt-3 space-y-2">
+                    {point.shap_explanation?.top_contributions.slice(0, 3).map((driver) => (
+                      <li key={`${point.timestamp}-${driver.feature}`} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="truncate text-text-secondary">{driver.feature}</span>
+                        <span className={driver.direction === 'up' ? 'font-mono text-success' : 'font-mono text-error'}>
+                          {driver.contribution_eur_per_mwh > 0 ? '+' : ''}{driver.contribution_eur_per_mwh.toFixed(2)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </SectionPanel>
   )

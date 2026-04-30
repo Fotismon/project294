@@ -7,9 +7,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from app.schemas.forecast import ForecastPoint, ForecastResponse
+from app.schemas.forecast import (
+    ForecastPoint,
+    ForecastResponse,
+    ShapFeatureContribution,
+    ShapSlotExplanation,
+)
 
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
+_SHAP_PATH = MODELS_DIR / "shap_per_slot.csv"
+_shap_rows: pd.DataFrame | None = None
 
 
 def _load_models() -> tuple[dict, list[str]]:
@@ -55,6 +62,93 @@ def _predict(model, X: pd.DataFrame) -> np.ndarray:
     return model.booster_.predict(X.values)
 
 
+def _load_shap_rows() -> pd.DataFrame:
+    global _shap_rows
+    if _shap_rows is None:
+        if not _SHAP_PATH.exists():
+            _shap_rows = pd.DataFrame()
+        else:
+            rows = pd.read_csv(_SHAP_PATH, parse_dates=["datetime"])
+            rows["slot"] = rows["datetime"].dt.hour * 4 + rows["datetime"].dt.minute // 15
+            rows["date"] = rows["datetime"].dt.date.astype(str)
+            _shap_rows = rows.sort_values("datetime").reset_index(drop=True)
+    return _shap_rows
+
+
+def _feature_label(feature: str) -> str:
+    labels = {
+        "mcp_lag_1d": "yesterday's same-slot price",
+        "mcp_lag_2d": "two-day lagged price",
+        "mcp_lag_7d": "same weekday price last week",
+        "mcp_roll7d_mean": "7-day slot average price",
+        "mcp_roll7d_std": "7-day slot volatility",
+        "hourly_trend": "recent hourly price trend",
+        "day_of_week": "day-of-week pattern",
+        "direct_radiation": "solar radiation forecast",
+        "cloud_cover": "cloud-cover forecast",
+        "wind_speed_10m": "wind forecast",
+        "temperature_2m": "temperature forecast",
+        "net_load_forecast_proxy": "net-load proxy",
+        "res_forecast_proxy": "renewables forecast proxy",
+        "demand_forecast_proxy": "demand forecast proxy",
+    }
+    return labels.get(feature, feature.replace("_", " "))
+
+
+def _shap_explanation_for_slot(target_date: str, slot_index: int) -> ShapSlotExplanation | None:
+    rows = _load_shap_rows()
+    if rows.empty:
+        return None
+
+    exact = rows[(rows["date"] == target_date) & (rows["slot"] == slot_index)]
+    if not exact.empty:
+        row = exact.iloc[0]
+        source = "historical_shap_per_slot"
+    else:
+        latest_date = str(rows["date"].max())
+        fallback = rows[(rows["date"] == latest_date) & (rows["slot"] == slot_index)]
+        if fallback.empty:
+            return None
+        row = fallback.iloc[0]
+        source = "historical_shap_slot_proxy"
+
+    contributions: list[ShapFeatureContribution] = []
+    for rank in range(1, 6):
+        feature = row.get(f"top_feature_{rank}")
+        contribution = row.get(f"top_shap_{rank}")
+        if pd.isna(feature) or pd.isna(contribution):
+            continue
+        value = round(float(contribution), 2)
+        contributions.append(
+            ShapFeatureContribution(
+                feature=_feature_label(str(feature)),
+                contribution_eur_per_mwh=value,
+                direction="up" if value >= 0 else "down",
+            )
+        )
+
+    return ShapSlotExplanation(
+        source=source,
+        explanation_date=str(row["date"]),
+        confidence_score=(
+            round(float(row["confidence"]), 4)
+            if "confidence" in row and not pd.isna(row["confidence"])
+            else None
+        ),
+        actual_price_eur_per_mwh=(
+            round(float(row["actual"]), 2)
+            if "actual" in row and not pd.isna(row["actual"])
+            else None
+        ),
+        model_price_eur_per_mwh=(
+            round(float(row["p50"]), 2)
+            if "p50" in row and not pd.isna(row["p50"])
+            else None
+        ),
+        top_contributions=contributions,
+    )
+
+
 def run_forecast(target_date: str, X: pd.DataFrame) -> ForecastResponse:
     """Run the three quantile models and return a ForecastResponse with 96 points."""
     X_ordered = X[_feature_list]
@@ -90,6 +184,7 @@ def run_forecast(target_date: str, X: pd.DataFrame) -> ForecastResponse:
             confidence_score=round(float(confidence_scores[i]), 4),
             arbitrage_signal=round(float(arbitrage_signals[i]), 2),
             risk_adjusted_price=round(float(risk_adjusted_prices[i]), 2),
+            shap_explanation=_shap_explanation_for_slot(target_date, i),
         )
         for i in range(96)
     ]

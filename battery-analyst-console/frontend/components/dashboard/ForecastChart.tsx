@@ -128,6 +128,7 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow, schedule }:
     const point = payload[0].payload
     const action = point.scheduled_action ?? 'idle'
     const priceText = `${point.p50_price.toFixed(1)} €/MWh`
+    const topShap = point.shap_explanation?.top_contributions?.slice(0, 3) ?? []
     const scheduleReason = action === 'charge'
       ? `Charge at ${formatTime(point.timestamp)} because this interval sits inside the low-price window before the planned discharge.`
       : action === 'discharge'
@@ -160,6 +161,21 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow, schedule }:
           </p>
           {point.soc_percent != null && <p className="text-xs text-text-secondary">Estimated SoC: {point.soc_percent.toFixed(1)}%</p>}
           <p className="max-w-xs pt-1 text-xs leading-relaxed text-text-secondary">{scheduleReason}</p>
+          {topShap.length > 0 && (
+            <div className="mt-2 border-t border-border pt-2">
+              <p className="text-xs uppercase tracking-wider text-text-muted">Top model drivers</p>
+              <ul className="mt-1 space-y-1">
+                {topShap.map((driver) => (
+                  <li key={`${driver.feature}-${driver.contribution_eur_per_mwh}`} className="flex justify-between gap-3 text-xs">
+                    <span className="max-w-[180px] truncate text-text-secondary">{driver.feature}</span>
+                    <span className={driver.direction === 'up' ? 'text-success' : 'text-error'}>
+                      {driver.contribution_eur_per_mwh > 0 ? '+' : ''}{driver.contribution_eur_per_mwh.toFixed(2)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     )
