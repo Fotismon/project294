@@ -16,6 +16,12 @@ interface ScenarioControlsProps {
   onRiskAppetiteChange: (value: RiskAppetite) => void
   temperaturePolicy: TemperaturePolicy
   onTemperaturePolicyChange: (value: TemperaturePolicy) => void
+  priceOverrideEnabled: boolean
+  onPriceOverrideEnabledChange: (value: boolean) => void
+  priceOverrideHour: string
+  onPriceOverrideHourChange: (value: string) => void
+  priceOverridePrice: number
+  onPriceOverridePriceChange: (value: number) => void
   onRunScenario: () => void
   isRunning?: boolean
 }
@@ -33,6 +39,12 @@ export function ScenarioControls({
   onRiskAppetiteChange,
   temperaturePolicy,
   onTemperaturePolicyChange,
+  priceOverrideEnabled,
+  onPriceOverrideEnabledChange,
+  priceOverrideHour,
+  onPriceOverrideHourChange,
+  priceOverridePrice,
+  onPriceOverridePriceChange,
   onRunScenario,
   isRunning = false
 }: ScenarioControlsProps) {
@@ -122,6 +134,47 @@ export function ScenarioControls({
             Solves all 96 intervals jointly with physical constraints.
           </p>
         </div>
+      </div>
+
+      <div className="mt-4 border border-border bg-surface p-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <label className="flex items-center gap-2 text-sm text-text-primary">
+            <input
+              type="checkbox"
+              checked={priceOverrideEnabled}
+              onChange={(event) => onPriceOverrideEnabledChange(event.target.checked)}
+              className="h-4 w-4 accent-info"
+            />
+            Override evening price assumption
+          </label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-text-secondary">Hour</label>
+              <input
+                type="time"
+                step="900"
+                value={priceOverrideHour}
+                onChange={(event) => onPriceOverrideHourChange(event.target.value)}
+                disabled={!priceOverrideEnabled}
+                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary disabled:text-text-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-text-secondary">Price EUR/MWh</label>
+              <input
+                type="number"
+                min="0"
+                value={priceOverridePrice}
+                onChange={(event) => onPriceOverridePriceChange(Number(event.target.value))}
+                disabled={!priceOverrideEnabled}
+                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary disabled:text-text-muted"
+              />
+            </div>
+          </div>
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-text-muted">
+          When enabled, the selected hour and next 45 minutes are set to this price before rerunning MILP.
+        </p>
       </div>
 
       <div className="mt-4 border-t border-border pt-4">

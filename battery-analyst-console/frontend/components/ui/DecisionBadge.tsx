@@ -14,9 +14,9 @@ function formatUnknown(value: string): string {
 function decisionDisplay(decision: Decision | string): { label: string; tone: BadgeTone } {
   switch (decision) {
     case 'execute':
-      return { label: 'Execute', tone: 'positive' }
+      return { label: 'Charge', tone: 'positive' }
     case 'execute_with_caution':
-      return { label: 'Execute with caution', tone: 'warning' }
+      return { label: 'Charge with caution', tone: 'warning' }
     case 'watch':
       return { label: 'Watch', tone: 'info' }
     case 'hold':

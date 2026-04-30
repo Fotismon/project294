@@ -3,22 +3,25 @@
 import React from 'react'
 import {
   Area,
-  AreaChart,
+  Bar,
   CartesianGrid,
+  ComposedChart,
   Line,
   ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis
 } from 'recharts'
-import { ForecastPoint } from '@/types/api'
+import { ForecastPoint, ScheduleResponse } from '@/types/api'
 import { EmptyState } from '@/components/ui'
 
 interface ForecastChartProps {
   data: ForecastPoint[]
   chargeWindow?: { start: string; end: string }
   dischargeWindow?: { start: string; end: string }
+  schedule?: ScheduleResponse
 }
 
 function formatTime(timestamp: string): string {
@@ -35,7 +38,62 @@ function timestampForWindow(data: ForecastPoint[], time: string): string {
   return `${date}T${time}:00`
 }
 
-export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastChartProps) {
+function timeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function windowDurationHours(window?: { start: string; end: string }): number {
+  if (!window || window.start === window.end) return 0
+  return Math.max(0, (timeToMinutes(window.end) - timeToMinutes(window.start)) / 60)
+}
+
+function pointMinutes(timestamp: string): number {
+  const time = formatTime(timestamp)
+  return timeToMinutes(time)
+}
+
+function isInWindow(timestamp: string, window?: { start: string; end: string }): boolean {
+  if (!window || window.start === window.end) return false
+  const current = pointMinutes(timestamp)
+  return current >= timeToMinutes(window.start) && current < timeToMinutes(window.end)
+}
+
+function progressionWithinWindow(timestamp: string, window?: { start: string; end: string }): number | null {
+  if (!window || window.start === window.end) return null
+  const start = timeToMinutes(window.start)
+  const end = timeToMinutes(window.end)
+  const current = pointMinutes(timestamp)
+  if (current < start) return 0
+  if (current >= end) return 1
+  return (current - start) / Math.max(1, end - start)
+}
+
+function estimatedPowerMw(totalMwh: number | undefined, durationHours: number): number {
+  if (!totalMwh || durationHours <= 0) return 100
+  return Math.round((totalMwh / durationHours) * 10) / 10
+}
+
+function socForPoint(timestamp: string, schedule?: ScheduleResponse): number | null {
+  if (!schedule) return null
+  const startSoc = schedule.soc_feasibility.start_soc
+  const endSoc = schedule.soc_feasibility.end_soc
+  const maxSoc = Math.max(startSoc, schedule.soc_feasibility.max_soc)
+  const chargeProgress = progressionWithinWindow(timestamp, schedule.charge_window)
+  const dischargeProgress = progressionWithinWindow(timestamp, schedule.discharge_window)
+
+  if (chargeProgress !== null && chargeProgress < 1) {
+    return Math.round((startSoc + (maxSoc - startSoc) * chargeProgress) * 1000) / 10
+  }
+  if (dischargeProgress !== null && dischargeProgress < 1) {
+    return Math.round((maxSoc - (maxSoc - endSoc) * dischargeProgress) * 1000) / 10
+  }
+  if (dischargeProgress === 1) return Math.round(endSoc * 1000) / 10
+  if (chargeProgress === 1) return Math.round(maxSoc * 1000) / 10
+  return Math.round(startSoc * 1000) / 10
+}
+
+export function ForecastChart({ data, chargeWindow, dischargeWindow, schedule }: ForecastChartProps) {
   if (data.length === 0) {
     return (
       <div className="h-[400px] w-full">
@@ -44,14 +102,20 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastC
     )
   }
 
+  const chargePower = estimatedPowerMw(schedule?.diagnostics?.total_mwh_charged, windowDurationHours(chargeWindow))
+  const dischargePower = estimatedPowerMw(schedule?.diagnostics?.total_mwh_discharged, windowDurationHours(dischargeWindow))
   const chartData = data
-    .filter((point) => {
-      const hour = new Date(point.timestamp).getHours()
-      return hour >= 5 && hour <= 23
-    })
     .map((point) => ({
       ...point,
-      uncertainty_price: [point.p10_price, point.p90_price] as [number, number]
+      uncertainty_price: [point.p10_price, point.p90_price] as [number, number],
+      charge_dispatch_mw: isInWindow(point.timestamp, chargeWindow) ? -chargePower : 0,
+      discharge_dispatch_mw: isInWindow(point.timestamp, dischargeWindow) ? dischargePower : 0,
+      soc_percent: socForPoint(point.timestamp, schedule),
+      scheduled_action: isInWindow(point.timestamp, chargeWindow)
+        ? 'charge'
+        : isInWindow(point.timestamp, dischargeWindow)
+          ? 'discharge'
+          : 'idle',
     }))
 
   const chargeStart = chargeWindow ? timestampForWindow(data, chargeWindow.start) : null
@@ -59,9 +123,16 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastC
   const dischargeStart = dischargeWindow ? timestampForWindow(data, dischargeWindow.start) : null
   const dischargeEnd = dischargeWindow ? timestampForWindow(data, dischargeWindow.end) : null
 
-  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint }> }) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint & { scheduled_action?: string; soc_percent?: number } }> }) => {
     if (!active || !payload?.length) return null
     const point = payload[0].payload
+    const action = point.scheduled_action ?? 'idle'
+    const priceText = `${point.p50_price.toFixed(1)} €/MWh`
+    const scheduleReason = action === 'charge'
+      ? `Charge at ${formatTime(point.timestamp)} because this interval sits inside the low-price window before the planned discharge.`
+      : action === 'discharge'
+        ? `Discharge at ${formatTime(point.timestamp)} because ${priceText} clears the selected charge cost after efficiency; spread after efficiency is ${schedule?.spread_after_efficiency.toFixed(1) ?? '-'} €/MWh.`
+        : 'No dispatch in this interval; MILP reserves energy for higher-value intervals or preserves constraints.'
 
     return (
       <div className="rounded-lg border border-border bg-surface-elevated p-3 shadow-lg">
@@ -78,32 +149,34 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastC
           )}
           <p
             className={`text-xs font-medium ${
-              point.action === 'charge'
+              action === 'charge'
                 ? 'text-charge'
-                : point.action === 'discharge'
+                : action === 'discharge'
                   ? 'text-discharge'
                   : 'text-text-muted'
             }`}
           >
-            {point.action.toUpperCase()}
+            {action.toUpperCase()}
           </p>
+          {point.soc_percent != null && <p className="text-xs text-text-secondary">Estimated SoC: {point.soc_percent.toFixed(1)}%</p>}
+          <p className="max-w-xs pt-1 text-xs leading-relaxed text-text-secondary">{scheduleReason}</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-[400px] w-full">
+    <div className="h-[520px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+        <ComposedChart data={chartData} margin={{ top: 20, right: 42, left: 20, bottom: 20 }}>
           <defs>
             <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.28} />
               <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="uncertaintyGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#a1a1aa" stopOpacity={0.22} />
-              <stop offset="95%" stopColor="#a1a1aa" stopOpacity={0.06} />
+              <stop offset="5%" stopColor="#a1a1aa" stopOpacity={0.18} />
+              <stop offset="95%" stopColor="#a1a1aa" stopOpacity={0.04} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" vertical={false} />
@@ -117,6 +190,7 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastC
             minTickGap={24}
           />
           <YAxis
+            yAxisId="price"
             stroke="#686878"
             tick={{ fill: '#9898a8', fontSize: 11 }}
             axisLine={{ stroke: '#2a2a3a' }}
@@ -129,15 +203,29 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastC
               style: { fill: '#686878', fontSize: 12 }
             }}
           />
+          <YAxis
+            yAxisId="soc"
+            orientation="right"
+            domain={[0, 100]}
+            stroke="#f59e0b"
+            tick={{ fill: '#f59e0b', fontSize: 11 }}
+            axisLine={{ stroke: '#2a2a3a' }}
+            tickLine={false}
+            tickFormatter={(value) => `${value}%`}
+          />
           <Tooltip content={<CustomTooltip />} />
+          <ReferenceLine y={0} yAxisId="price" stroke="#686878" strokeOpacity={0.5} />
 
           {chargeStart && chargeEnd && (
-            <ReferenceArea x1={chargeStart} x2={chargeEnd} strokeOpacity={0} fill="#22c55e" fillOpacity={0.12} />
+            <ReferenceArea x1={chargeStart} x2={chargeEnd} yAxisId="price" strokeOpacity={0} fill="#3b82f6" fillOpacity={0.1} />
           )}
           {dischargeStart && dischargeEnd && (
-            <ReferenceArea x1={dischargeStart} x2={dischargeEnd} strokeOpacity={0} fill="#ef4444" fillOpacity={0.12} />
+            <ReferenceArea x1={dischargeStart} x2={dischargeEnd} yAxisId="price" strokeOpacity={0} fill="#f59e0b" fillOpacity={0.12} />
           )}
+          <Bar yAxisId="price" dataKey="charge_dispatch_mw" fill="#3b82f6" fillOpacity={0.75} barSize={4} />
+          <Bar yAxisId="price" dataKey="discharge_dispatch_mw" fill="#f59e0b" fillOpacity={0.75} barSize={4} />
           <Area
+            yAxisId="price"
             type="monotone"
             dataKey="uncertainty_price"
             stroke="transparent"
@@ -147,6 +235,7 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastC
             activeDot={false}
           />
           <Area
+            yAxisId="price"
             type="monotone"
             dataKey="p50_price"
             stroke="#3b82f6"
@@ -157,6 +246,7 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastC
             activeDot={{ r: 4, fill: '#3b82f6', stroke: '#0a0a0f', strokeWidth: 2 }}
           />
           <Line
+            yAxisId="price"
             type="monotone"
             dataKey="actual_price"
             stroke="#e8e8ed"
@@ -164,7 +254,16 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow }: ForecastC
             dot={false}
             connectNulls={false}
           />
-        </AreaChart>
+          <Line
+            yAxisId="soc"
+            type="monotone"
+            dataKey="soc_percent"
+            stroke="#f59e0b"
+            strokeWidth={2}
+            dot={false}
+            connectNulls
+          />
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   )

@@ -53,9 +53,33 @@ function upperValue(range?: number[] | [number, number]): number {
   return range[1] ?? range[0] ?? 0
 }
 
+function lowerValue(range?: number[] | [number, number]): number {
+  if (!range?.length) return 0
+  return range[0] ?? 0
+}
+
+function sameWindow(left?: Window | null, right?: Window | null): boolean {
+  if (!left && !right) return true
+  if (!left || !right) return false
+  return left.start === right.start && left.end === right.end && Math.abs(left.avg_price - right.avg_price) < 0.01
+}
+
+function isDistinctAlternative(schedule: ScheduleResponse, alternative: AlternativeSchedule): boolean {
+  const alternativeValue = alternative.expected_value_range_eur ?? schedule.expected_value_range_eur
+  const valueDiffers = (
+    Math.abs(lowerValue(alternativeValue) - lowerValue(schedule.expected_value_range_eur)) >= 1
+    || Math.abs(upperValue(alternativeValue) - upperValue(schedule.expected_value_range_eur)) >= 1
+  )
+  const windowsDiffer = (
+    !sameWindow(alternative.charge_window, schedule.charge_window)
+    || !sameWindow(alternative.discharge_window, schedule.discharge_window)
+  )
+  return valueDiffers || windowsDiffer
+}
+
 function selectedOption(schedule: ScheduleResponse): ComparisonOption {
   return {
-    title: 'Health-aware recommendation',
+    title: 'Health-aware MILP schedule',
     status: 'Recommended',
     expectedValue: schedule.expected_value_range_eur,
     chargeWindow: schedule.charge_window,
@@ -67,9 +91,12 @@ function selectedOption(schedule: ScheduleResponse): ComparisonOption {
 }
 
 function highestValueAlternative(schedule: ScheduleResponse): AlternativeSchedule | null {
-  if (schedule.alternatives.length === 0) return null
+  const distinctAlternatives = schedule.alternatives.filter((alternative) => (
+    isDistinctAlternative(schedule, alternative)
+  ))
+  if (distinctAlternatives.length === 0) return null
 
-  return schedule.alternatives.reduce((best, current) => (
+  return distinctAlternatives.reduce((best, current) => (
     upperValue(current.expected_value_range_eur) > upperValue(best.expected_value_range_eur) ? current : best
   ))
 }
@@ -197,7 +224,9 @@ export function ProfitHealthComparisonCard({ schedule, className = '' }: ProfitH
   const alternative = highestValueAlternative(schedule)
   const options = schedule.decision === 'hold'
     ? holdOptions(schedule)
-    : [valueOption(schedule, alternative), selectedOption(schedule)]
+    : alternative
+      ? [valueOption(schedule, alternative), selectedOption(schedule)]
+      : [selectedOption(schedule)]
   const consideredFactors = factors(schedule)
 
   return (
@@ -215,10 +244,17 @@ export function ProfitHealthComparisonCard({ schedule, className = '' }: ProfitH
           <p className="text-sm leading-relaxed text-text-secondary">{storyText(schedule, alternative)}</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <OptionCard option={options[0]} />
-          <OptionCard option={options[1]} />
+        <div className={`grid grid-cols-1 gap-4 ${options.length > 1 ? 'xl:grid-cols-2' : ''}`}>
+          {options.map((option) => (
+            <OptionCard key={`${option.title}-${option.status}`} option={option} />
+          ))}
         </div>
+
+        {schedule.decision !== 'hold' && !alternative && (
+          <div className="border border-border bg-surface px-3 py-2 text-sm text-text-secondary">
+            No distinct higher-value alternative was returned. The MILP schedule is shown as the selected health-aware recommendation.
+          </div>
+        )}
 
         <div className="border-t border-border pt-4">
           <h4 className="mb-2 text-xs uppercase tracking-wider text-text-secondary">Factors considered</h4>

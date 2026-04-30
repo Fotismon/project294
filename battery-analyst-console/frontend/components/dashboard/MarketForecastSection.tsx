@@ -144,8 +144,9 @@ export function MarketForecastSection({ forecastData, schedule }: MarketForecast
             </div>
             <div className="flex flex-wrap gap-3 text-xs text-text-muted">
               <LegendItem label="Forecast price" className="bg-info" />
-              <LegendItem label="Charge window" className="bg-success/70" />
-              <LegendItem label="Discharge window" className="bg-error/70" />
+              <LegendItem label="Charge dispatch" className="bg-charge" />
+              <LegendItem label="Discharge dispatch" className="bg-discharge" />
+              <LegendItem label="SoC trajectory" className="bg-discharge" />
               <LegendItem label="No-action / idle" className="bg-text-muted" />
             </div>
           </div>
@@ -153,6 +154,7 @@ export function MarketForecastSection({ forecastData, schedule }: MarketForecast
             data={forecastData}
             chargeWindow={hasChargeWindow ? schedule.charge_window : undefined}
             dischargeWindow={hasDischargeWindow ? schedule.discharge_window : undefined}
+            schedule={schedule}
           />
         </div>
 

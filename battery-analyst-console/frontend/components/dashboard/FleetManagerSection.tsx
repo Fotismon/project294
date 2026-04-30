@@ -33,10 +33,6 @@ export function FleetManagerSection({
 }: FleetManagerSectionProps) {
   return (
     <section className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold text-text-primary">Battery Assets</h2>
-        <p className="mt-1 text-sm text-text-secondary">Asset-level status, controls, and operating decisions.</p>
-      </div>
       <FleetSummaryCards summary={summary} />
       <FleetBulkActions
         selectedCount={selectedIds.length}

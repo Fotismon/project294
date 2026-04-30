@@ -18,8 +18,8 @@ interface SideNavProps {
 const navItems: SideNavItem[] = [
   {
     id: 'fleet',
-    label: 'Fleet Overview',
-    description: 'Portfolio decision'
+    label: "Today's Plan",
+    description: 'Price, dispatch, SoC'
   },
   {
     id: 'assets',
@@ -33,13 +33,13 @@ const navItems: SideNavItem[] = [
   },
   {
     id: 'backtest',
-    label: 'Backtest',
+    label: 'Performance & P&L',
     description: 'Historical replay'
   },
   {
     id: 'alerts',
-    label: 'Alerts',
-    description: 'Operational risk'
+    label: 'Risk & Alerts',
+    description: 'Health and model risk'
   }
 ]
 

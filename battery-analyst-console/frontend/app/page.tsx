@@ -15,6 +15,7 @@ import { FleetManagerSection } from '@/components/dashboard/FleetManagerSection'
 import { NoActionPanel } from '@/components/dashboard/NoActionPanel'
 import { OptimizerBadge } from '@/components/dashboard/OptimizerBadge'
 import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
+import { RiskAlertsView } from '@/components/dashboard/RiskAlertsView'
 import { ScenarioComparisonPanel } from '@/components/dashboard/ScenarioComparisonPanel'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { ConsoleSectionId } from '@/components/dashboard/SideNav'
@@ -86,6 +87,12 @@ function forecastPrices(points: ForecastPoint[]): number[] {
   return points.map((point) => point.p50_price)
 }
 
+function overridePriceAtHour(prices: number[], hour: string, price: number): number[] {
+  const [hours, minutes] = hour.split(':').map(Number)
+  const startIndex = Math.max(0, Math.min(95, hours * 4 + Math.floor(minutes / 15)))
+  return prices.map((value, index) => index >= startIndex && index < startIndex + 4 ? price : value)
+}
+
 function forecastUncertaintyWidth(points: ForecastPoint[]): number | null {
   if (points.length === 0) return null
   const totalWidth = points.reduce((sum, point) => sum + Math.max(0, point.p90_price - point.p10_price), 0)
@@ -112,15 +119,26 @@ function allocateScheduleValueToAssets(
   if (!fleetValue || fleetValue.length < 2) return assets
 
   const activeAssets = assets.filter((asset) => asset.status !== 'offline')
-  const totalActivePower = activeAssets.reduce((sum, asset) => sum + asset.power_mw, 0)
-  if (totalActivePower <= 0) return assets
+  const weights = new Map<string, number>()
+  activeAssets.forEach((asset) => {
+    const statusFactor = asset.status === 'limited' ? 0.78 : 1
+    const temperatureFactor = asset.temperature_c >= 30
+      ? Math.max(0.72, 1 - (asset.temperature_c - 29) * 0.035)
+      : 1
+    const stressFactor = asset.stress_level === 'high' ? 0.72 : asset.stress_level === 'medium' ? 0.9 : 1
+    const socDistance = Math.abs(asset.soc - 0.58)
+    const socFactor = Math.max(0.72, 1 - socDistance * 0.6)
+    weights.set(asset.id, asset.power_mw * statusFactor * temperatureFactor * stressFactor * socFactor)
+  })
+  const totalWeight = Array.from(weights.values()).reduce((sum, weight) => sum + weight, 0)
+  if (totalWeight <= 0) return assets
 
   return assets.map((asset) => {
     if (asset.status === 'offline') {
       return { ...asset, expected_value_eur: [0, 0] }
     }
 
-    const share = asset.power_mw / totalActivePower
+    const share = (weights.get(asset.id) ?? 0) / totalWeight
     return {
       ...asset,
       expected_value_eur: [
@@ -205,6 +223,9 @@ export default function Home() {
   const [degradationCost, setDegradationCost] = useState(10)
   const [riskAppetite, setRiskAppetite] = useState<RiskAppetite>('balanced')
   const [temperaturePolicy, setTemperaturePolicy] = useState<TemperaturePolicy>('normal')
+  const [scenarioPriceOverrideEnabled, setScenarioPriceOverrideEnabled] = useState(false)
+  const [scenarioOverrideHour, setScenarioOverrideHour] = useState('19:00')
+  const [scenarioOverridePrice, setScenarioOverridePrice] = useState(200)
   const optimizerMode = 'milp' as const
   const [isScenarioRunning, setIsScenarioRunning] = useState(false)
   const [baseScenarioSchedule, setBaseScenarioSchedule] = useState<ScheduleResponse | null>(null)
@@ -333,7 +354,10 @@ export default function Home() {
       return
     }
 
-    const prices = forecastPrices(forecastData)
+    const basePrices = forecastPrices(forecastData)
+    const prices = scenarioPriceOverrideEnabled
+      ? overridePriceAtHour(basePrices, scenarioOverrideHour, scenarioOverridePrice)
+      : basePrices
     if (prices.length !== 96) {
       setError('Scenario requires 96 live forecast intervals from /forecast.')
       return
@@ -540,6 +564,12 @@ export default function Home() {
                   onRiskAppetiteChange={setRiskAppetite}
                   temperaturePolicy={temperaturePolicy}
                   onTemperaturePolicyChange={setTemperaturePolicy}
+                  priceOverrideEnabled={scenarioPriceOverrideEnabled}
+                  onPriceOverrideEnabledChange={setScenarioPriceOverrideEnabled}
+                  priceOverrideHour={scenarioOverrideHour}
+                  onPriceOverrideHourChange={setScenarioOverrideHour}
+                  priceOverridePrice={scenarioOverridePrice}
+                  onPriceOverridePriceChange={setScenarioOverridePrice}
                   onRunScenario={handleRunScenario}
                   isRunning={isScenarioRunning}
                 />
@@ -615,14 +645,20 @@ export default function Home() {
 
         {activeSection === 'alerts' && (
           <div className="space-y-6">
-            <SectionHeader title="Alerts" subtitle="Operational risks from the latest schedule or scenario." />
-            <FleetAlertsPanel alerts={alerts} assets={displayFleetAssets} />
+            <SectionHeader title="Risk & Alerts" subtitle="Model, market, and battery health signals." />
+            <RiskAlertsView
+              alerts={alerts}
+              assets={displayFleetAssets}
+              schedule={scheduleData}
+              forecastData={forecastData}
+              backtestResult={backtestResult}
+            />
           </div>
         )}
 
         {activeSection === 'backtest' && (
           <div className="space-y-6">
-            <SectionHeader title="Backtest" subtitle="Replay historical recommendations against realized prices." />
+            <SectionHeader title="Performance & P&L" subtitle="Replay historical recommendations against realized prices and inspect P&L drivers." />
             <BacktestPanel
               date={backtestDate}
               onDateChange={setBacktestDate}

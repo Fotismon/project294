@@ -18,13 +18,11 @@ import {
 } from '@/components/ui'
 import { AlternativesPanel } from './AlternativesPanel'
 import { ConstraintPanel } from './ConstraintPanel'
-import { DispatchDiagnosticsPanel } from './DispatchDiagnosticsPanel'
 import { FleetAlertsPanel } from './FleetAlertsPanel'
 import { MarketForecastSection } from './MarketForecastSection'
 import { OptimizerBadge } from './OptimizerBadge'
 import { ProfitHealthComparisonCard } from './ProfitHealthComparisonCard'
 import { SoCFeasibilityCard } from './SoCFeasibilityCard'
-import { ValueDiagnosticsPanel } from './ValueDiagnosticsPanel'
 
 interface FleetOverviewProps {
   schedule: ScheduleResponse
@@ -85,15 +83,37 @@ export function FleetOverview({
   const hasAlerts = alerts.length > 0 || hasGeneratedAssetAlerts(fleetAssets)
   const singleProfileValue = schedule.single_profile_expected_value_range_eur ?? schedule.expected_value_range_eur
   const fleetValue = schedule.fleet_economics?.fleet_expected_value_range_eur ?? schedule.expected_value_range_eur
+  const valueMidpoint = Math.round(((fleetValue[0] ?? 0) + (fleetValue[1] ?? fleetValue[0] ?? 0)) / 2)
+  const confidenceBand = Math.round(Math.abs((fleetValue[1] ?? 0) - (fleetValue[0] ?? 0)) / 2)
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-text-primary">Fleet Overview</h2>
-          <p className="mt-1 text-sm text-text-secondary">Portfolio decision, market signal, asset actions, and operational risk.</p>
+          <h2 className="text-2xl font-semibold text-text-primary">Today's Plan</h2>
+          <p className="mt-1 text-sm text-text-secondary">Forecast curve, MILP dispatch, SoC trajectory, and expected P&L.</p>
         </div>
         <OptimizerBadge optimizer={schedule.optimizer} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <MetricCard
+          label="Expected P&L today"
+          value={formatEuro(valueMidpoint)}
+          helperText={`Confidence: +/-${formatEuro(confidenceBand)}`}
+          tone={valueMidpoint >= 0 ? 'positive' : 'warning'}
+        />
+        <MetricCard
+          label="Cycles planned"
+          value={schedule.diagnostics ? schedule.diagnostics.equivalent_full_cycles.toFixed(2) : '0.00'}
+          helperText={`${schedule.diagnostics?.total_mwh_discharged.toFixed(1) ?? '0.0'} MWh discharged`}
+          tone="info"
+        />
+        <MetricCard
+          label="Athens market day"
+          value={schedule.date}
+          helperText="Europe/Athens timezone"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 min-[1440px]:grid-cols-7">
@@ -105,8 +125,8 @@ export function FleetOverview({
         <MetricCard label="Fleet availability" value={`${fleetSummary.available_assets}/${fleetSummary.total_assets}`} helperText={`${formatPercent(fleetSummary.average_soc)} average SoC`} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 min-[1440px]:grid-cols-[minmax(0,2fr)_minmax(320px,0.9fr)]">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2.4fr)_minmax(320px,0.8fr)]">
+        <div className="space-y-6 xl:col-span-2">
           <SectionPanel title="Market Forecast" subtitle="Price signal and recommended operating windows.">
             <MarketForecastSection
               forecastData={forecastData}
@@ -124,7 +144,7 @@ export function FleetOverview({
           <AlternativesPanel alternatives={schedule.alternatives} />
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6 xl:col-span-2">
           <SectionPanel title="Operational Alerts" subtitle="Risks from the latest schedule or scenario.">
             {hasAlerts ? (
               <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />
@@ -135,9 +155,6 @@ export function FleetOverview({
               />
             )}
           </SectionPanel>
-
-          <DispatchDiagnosticsPanel diagnostics={schedule.diagnostics} optimizer={schedule.optimizer} compact />
-          <ValueDiagnosticsPanel provenance={schedule.forecast_provenance} diagnostics={schedule.price_spread_diagnostics} />
         </div>
       </div>
     </div>

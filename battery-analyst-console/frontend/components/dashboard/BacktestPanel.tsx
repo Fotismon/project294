@@ -29,6 +29,7 @@ import {
   StatusBadge
 } from '@/components/ui'
 import { OptimizerBadge } from './OptimizerBadge'
+import { PerformancePnLPanel } from './PerformancePnLPanel'
 
 interface BacktestPanelProps {
   date: string
@@ -282,6 +283,8 @@ export function BacktestPanel({
               dischargeWindow={result.discharge_window ?? undefined}
             />
 
+            <PerformancePnLPanel result={result} />
+
             <EconomicResult result={economic} isHold={isHold} />
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -400,10 +403,10 @@ function BacktestCurveChart({
             />
             <Tooltip content={<CustomTooltip />} />
             {chargeStart && chargeEnd && (
-              <ReferenceArea x1={chargeStart} x2={chargeEnd} strokeOpacity={0} fill="#22c55e" fillOpacity={0.12} />
+              <ReferenceArea x1={chargeStart} x2={chargeEnd} strokeOpacity={0} fill="#3b82f6" fillOpacity={0.12} />
             )}
             {dischargeStart && dischargeEnd && (
-              <ReferenceArea x1={dischargeStart} x2={dischargeEnd} strokeOpacity={0} fill="#ef4444" fillOpacity={0.12} />
+              <ReferenceArea x1={dischargeStart} x2={dischargeEnd} strokeOpacity={0} fill="#f59e0b" fillOpacity={0.12} />
             )}
             <Line type="monotone" dataKey="forecast_price" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
             <Line type="monotone" dataKey="realized_price" stroke="#e8e8ed" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
