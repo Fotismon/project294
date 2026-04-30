@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import backtest, forecast, health, scenario, schedule
+from app.api import backtest, fleet, forecast, health, scenario, schedule
 
 app = FastAPI(title="Battery Analyst Console API", version="0.1.0")
 
@@ -25,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(fleet.router)
 app.include_router(forecast.router)
 app.include_router(schedule.router)
 app.include_router(scenario.router)

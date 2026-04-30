@@ -13,11 +13,6 @@ const kindClasses: Record<ApiStatus['kind'], { shell: string; dot: string; label
     dot: 'bg-success',
     label: 'text-success'
   },
-  mock: {
-    shell: 'border-warning/40 bg-warning/5',
-    dot: 'bg-warning',
-    label: 'text-warning'
-  },
   error: {
     shell: 'border-error/40 bg-error/5',
     dot: 'bg-error',

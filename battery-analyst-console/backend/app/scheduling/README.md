@@ -92,3 +92,31 @@ API integration and fallback behavior are intentionally left for a later phase.
 Forced `milp` returns a valid hold response if MILP is infeasible or unavailable.
 `auto` returns a `window_v1` response with `fallback_used=true` and a clear
 fallback reason if MILP fails.
+
+## Forecast provenance and fleet economics
+
+Forecast prices are treated as `EUR/MWh`. Open-Meteo provides weather features
+only; the backend price forecast is the LightGBM DAM model output. The scheduler
+value math is:
+
+```text
+EUR = EUR/MWh * MWh
+```
+
+`/schedule` and `/scenario` remain single-profile compatible, but responses now
+also include backend-configured fleet economics:
+
+- `single_profile_expected_value_range_eur`
+- `fleet_economics.fleet_expected_value_range_eur`
+- active battery count
+- total fleet power MW
+- total fleet capacity MWh
+
+The backend fleet config is the source of truth for scaling. The frontend does
+not scale economics from mock assets.
+
+Run the value diagnostics example from the backend folder:
+
+```bash
+python -m app.scheduling.value_diagnostics_example
+```

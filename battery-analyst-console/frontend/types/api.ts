@@ -15,7 +15,7 @@ export type DataQualityLevel = 'low' | 'medium' | 'high'
 export type BatteryAction = 'auto' | 'charge' | 'discharge' | 'idle'
 export type EffectiveBatteryAction = Exclude<BatteryAction, 'auto'>
 export type FleetForecastAction = EffectiveBatteryAction | 'mixed'
-export type ApiStatusKind = 'connected' | 'mock' | 'error' | 'loading'
+export type ApiStatusKind = 'connected' | 'error' | 'loading'
 export type OptimizerMode = 'window_v1' | 'milp' | 'auto'
 
 export interface ApiStatus {
@@ -51,6 +51,7 @@ export interface BatteryAsset {
   expected_value_eur: [number, number]
   stress_level: BatteryStressLevel
   constraint_warnings: string[]
+  profile_name?: string
 }
 
 export interface FleetSummary {
@@ -158,6 +159,43 @@ export interface DispatchDiagnostics {
   ramp_rate_violations: number
 }
 
+export interface ForecastProvenance {
+  source: string
+  weather_source: string
+  weather_api_role: string
+  price_model: string
+  price_output: string
+  price_unit: string
+}
+
+export interface PriceSpreadSummary {
+  min_price_eur_per_mwh: number
+  max_price_eur_per_mwh: number
+  raw_spread_eur_per_mwh: number
+  charge_avg_price_eur_per_mwh: number
+  discharge_avg_price_eur_per_mwh: number
+  spread_after_efficiency_eur_per_mwh: number
+}
+
+export interface PriceSpreadDiagnostics {
+  mock_reference: PriceSpreadSummary
+  live_forecast: PriceSpreadSummary
+  value_math: string
+}
+
+export interface FleetEconomics {
+  single_profile_expected_value_range_eur: number[]
+  fleet_expected_value_range_eur: number[]
+  active_battery_count: number
+  total_fleet_power_mw: number
+  total_fleet_capacity_mwh: number
+  scaling_factor: number
+  scaling_basis: string
+  price_unit: string
+  energy_unit: string
+  value_formula: string
+}
+
 export interface AlternativeSchedule {
   label?: string
   charge_window: Window | null
@@ -189,6 +227,10 @@ export interface ScheduleResponse {
   confidence: Confidence
   optimizer?: OptimizerMetadata
   diagnostics?: DispatchDiagnostics
+  single_profile_expected_value_range_eur?: number[]
+  fleet_economics?: FleetEconomics | null
+  forecast_provenance?: ForecastProvenance | null
+  price_spread_diagnostics?: PriceSpreadDiagnostics | null
   charge_window: Window
   discharge_window: Window
   spread_after_efficiency: number
@@ -332,6 +374,7 @@ export interface BackendForecastResponse {
   unit: string
   points: BackendForecastPoint[]
   avg_band_width_eur: number
+  provenance?: ForecastProvenance
 }
 
 export interface BackendSoCFeasibility {
@@ -371,6 +414,10 @@ export interface BackendScheduleResponse {
   confidence: string
   optimizer?: OptimizerMetadata
   diagnostics?: DispatchDiagnostics
+  single_profile_expected_value_range_eur?: number[]
+  fleet_economics?: FleetEconomics | null
+  forecast_provenance?: ForecastProvenance | null
+  price_spread_diagnostics?: PriceSpreadDiagnostics | null
   charge_window: Window
   discharge_window: Window
   spread_after_efficiency: number
@@ -413,7 +460,7 @@ export interface BackendBacktestResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Legacy/mock compatibility types
+// Legacy compatibility types
 // ---------------------------------------------------------------------------
 
 // The real backend /scenario endpoint now returns BackendScheduleResponse.

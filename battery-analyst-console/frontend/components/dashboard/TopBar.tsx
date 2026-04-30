@@ -16,10 +16,6 @@ const statusClasses: Record<ApiStatus['kind'], { dot: string; text: string }> = 
     dot: 'bg-success',
     text: 'text-success'
   },
-  mock: {
-    dot: 'bg-warning',
-    text: 'text-warning'
-  },
   error: {
     dot: 'bg-error',
     text: 'text-error'

@@ -28,6 +28,7 @@ import { OptimizerBadge } from './OptimizerBadge'
 import { ProfitHealthComparisonCard } from './ProfitHealthComparisonCard'
 import { RecommendationSection } from './RecommendationSection'
 import { ScheduleTradeoffMatrix } from './ScheduleTradeoffMatrix'
+import { ValueDiagnosticsPanel } from './ValueDiagnosticsPanel'
 
 interface FleetOverviewProps {
   schedule: ScheduleResponse
@@ -108,6 +109,8 @@ export function FleetOverview({
   onCloseAssetDetail
 }: FleetOverviewProps) {
   const hasAlerts = alerts.length > 0 || hasGeneratedAssetAlerts(fleetAssets)
+  const singleProfileValue = schedule.single_profile_expected_value_range_eur ?? schedule.expected_value_range_eur
+  const fleetValue = schedule.fleet_economics?.fleet_expected_value_range_eur ?? schedule.expected_value_range_eur
 
   return (
     <div className="space-y-6">
@@ -119,10 +122,11 @@ export function FleetOverview({
         <OptimizerBadge optimizer={schedule.optimizer} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 min-[1440px]:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 min-[1440px]:grid-cols-7">
         <MetricCard label="Decision" value={<DecisionBadge decision={schedule.decision} size="md" />} />
         <MetricCard label="Confidence" value={<ConfidenceBadge confidence={schedule.confidence} size="md" />} />
-        <MetricCard label="Expected value" value={formatEuroRange(schedule.expected_value_range_eur)} tone="positive" />
+        <MetricCard label="Fleet value" value={formatEuroRange(fleetValue)} helperText={`${schedule.fleet_economics?.active_battery_count ?? fleetSummary.available_assets} active batteries`} tone="positive" />
+        <MetricCard label="Single-profile value" value={formatEuroRange(singleProfileValue)} tone="info" />
         <MetricCard label="Spread after efficiency" value={formatSpread(schedule.spread_after_efficiency)} tone="info" />
         <MetricCard label="Fleet availability" value={`${fleetSummary.available_assets}/${fleetSummary.total_assets}`} helperText={`${formatPercent(fleetSummary.average_soc)} average SoC`} />
         <MetricCard label="Battery stress" value={<StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} size="md" />} />
@@ -183,6 +187,7 @@ export function FleetOverview({
           </SectionPanel>
 
           <DispatchDiagnosticsPanel diagnostics={schedule.diagnostics} optimizer={schedule.optimizer} compact />
+          <ValueDiagnosticsPanel provenance={schedule.forecast_provenance} diagnostics={schedule.price_spread_diagnostics} />
         </div>
       </div>
     </div>

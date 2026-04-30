@@ -208,6 +208,85 @@ class DispatchDiagnostics(BaseModel):
     )
 
 
+class ForecastProvenance(BaseModel):
+    source: str = Field(..., description="Forecast source identifier.")
+    weather_source: str = Field(..., description="Weather data provider.")
+    weather_api_role: str = Field(
+        ...,
+        description="How weather API data is used in the forecast pipeline.",
+    )
+    price_model: str = Field(..., description="Price forecasting model.")
+    price_output: str = Field(..., description="Meaning of the generated price series.")
+    price_unit: str = Field(..., description="Forecast price unit.")
+
+
+class PriceSpreadSummary(BaseModel):
+    min_price_eur_per_mwh: float = Field(..., description="Minimum price in EUR/MWh.")
+    max_price_eur_per_mwh: float = Field(..., description="Maximum price in EUR/MWh.")
+    raw_spread_eur_per_mwh: float = Field(
+        ...,
+        description="Discharge average minus charge average before efficiency.",
+    )
+    charge_avg_price_eur_per_mwh: float = Field(
+        ...,
+        description="Selected charge-window average price in EUR/MWh.",
+    )
+    discharge_avg_price_eur_per_mwh: float = Field(
+        ...,
+        description="Selected discharge-window average price in EUR/MWh.",
+    )
+    spread_after_efficiency_eur_per_mwh: float = Field(
+        ...,
+        description="Selected discharge average minus RTE-adjusted charge average.",
+    )
+
+
+class PriceSpreadDiagnostics(BaseModel):
+    mock_reference: PriceSpreadSummary = Field(
+        ...,
+        description="Historical sample/mock spread used for regression comparison.",
+    )
+    live_forecast: PriceSpreadSummary = Field(
+        ...,
+        description="Spread summary for the live forecast and selected windows.",
+    )
+    value_math: str = Field(
+        "EUR = EUR/MWh * MWh",
+        description="Unit rule used for schedule value calculations.",
+    )
+
+
+class FleetEconomics(BaseModel):
+    single_profile_expected_value_range_eur: list[float] = Field(
+        ...,
+        description="Expected value range for the single scheduled battery profile.",
+    )
+    fleet_expected_value_range_eur: list[float] = Field(
+        ...,
+        description="Expected value range scaled to configured active fleet assets.",
+    )
+    active_battery_count: int = Field(..., description="Active configured battery count.")
+    total_fleet_power_mw: float = Field(..., description="Total active fleet power in MW.")
+    total_fleet_capacity_mwh: float = Field(
+        ...,
+        description="Total active fleet capacity in MWh.",
+    )
+    scaling_factor: float = Field(
+        ...,
+        description="Power-weighted multiplier from single profile value to fleet value.",
+    )
+    scaling_basis: str = Field(
+        ...,
+        description="Explanation of how fleet scaling was calculated.",
+    )
+    price_unit: str = Field("EUR/MWh", description="Price unit used for value calculations.")
+    energy_unit: str = Field("MWh", description="Energy unit used for value calculations.")
+    value_formula: str = Field(
+        "net_spread_eur_per_mwh * discharged_mwh",
+        description="Value formula used by scheduler economics.",
+    )
+
+
 class Alert(BaseModel):
     level: str = Field(..., description="Alert severity level.")
     message: str = Field(..., description="Human-readable alert message.")
@@ -242,6 +321,22 @@ class ScheduleResponse(BaseModel):
     expected_value_range_eur: list[float] = Field(
         ...,
         description="Expected schedule value range in EUR.",
+    )
+    single_profile_expected_value_range_eur: list[float] | None = Field(
+        None,
+        description="Expected value range for the single scheduled battery profile.",
+    )
+    fleet_economics: FleetEconomics | None = Field(
+        None,
+        description="Fleet-scaled economics using backend fleet configuration.",
+    )
+    forecast_provenance: ForecastProvenance | None = Field(
+        None,
+        description="Forecast source and unit provenance.",
+    )
+    price_spread_diagnostics: PriceSpreadDiagnostics | None = Field(
+        None,
+        description="Spread comparison and value-unit diagnostics.",
     )
     soc_feasibility: SoCFeasibility = Field(..., description="SoC feasibility assessment.")
     battery_stress: BatteryStress = Field(..., description="Battery stress assessment.")
@@ -290,6 +385,46 @@ class ScheduleResponse(BaseModel):
                 },
                 "spread_after_efficiency": 71.6,
                 "expected_value_range_eur": [120, 180],
+                "single_profile_expected_value_range_eur": [120, 180],
+                "fleet_economics": {
+                    "single_profile_expected_value_range_eur": [120, 180],
+                    "fleet_expected_value_range_eur": [1200, 1800],
+                    "active_battery_count": 10,
+                    "total_fleet_power_mw": 1000.0,
+                    "total_fleet_capacity_mwh": 3000.0,
+                    "scaling_factor": 10.0,
+                    "scaling_basis": "Configured active fleet power divided by scheduled profile power.",
+                    "price_unit": "EUR/MWh",
+                    "energy_unit": "MWh",
+                    "value_formula": "net_spread_eur_per_mwh * discharged_mwh",
+                },
+                "forecast_provenance": {
+                    "source": "open_meteo_weather_plus_lightgbm_price_forecast",
+                    "weather_source": "Open-Meteo",
+                    "weather_api_role": "Weather features only; not direct price data.",
+                    "price_model": "LightGBM DAM price forecast",
+                    "price_output": "Predicted day-ahead market price forecast",
+                    "price_unit": "EUR/MWh",
+                },
+                "price_spread_diagnostics": {
+                    "mock_reference": {
+                        "min_price_eur_per_mwh": 35.0,
+                        "max_price_eur_per_mwh": 120.0,
+                        "raw_spread_eur_per_mwh": 85.0,
+                        "charge_avg_price_eur_per_mwh": 35.0,
+                        "discharge_avg_price_eur_per_mwh": 120.0,
+                        "spread_after_efficiency_eur_per_mwh": 78.82,
+                    },
+                    "live_forecast": {
+                        "min_price_eur_per_mwh": 35.0,
+                        "max_price_eur_per_mwh": 120.0,
+                        "raw_spread_eur_per_mwh": 78.4,
+                        "charge_avg_price_eur_per_mwh": 38.4,
+                        "discharge_avg_price_eur_per_mwh": 116.8,
+                        "spread_after_efficiency_eur_per_mwh": 71.62,
+                    },
+                    "value_math": "EUR = EUR/MWh * MWh",
+                },
                 "soc_feasibility": {
                     "feasible": True,
                     "min_soc": 0.1,

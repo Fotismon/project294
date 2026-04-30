@@ -180,26 +180,16 @@ function profileName(value: RiskAppetite | string | undefined): RiskAppetite | s
   return value || 'balanced'
 }
 
-function hourOf(timestamp: string): number {
-  const parsed = new Date(timestamp)
-  if (!Number.isNaN(parsed.getTime())) return parsed.getHours()
-  const match = timestamp.match(/T(\d{2}):/)
-  return match ? Number(match[1]) : 0
-}
-
 function mapForecast(response: BackendForecastResponse): ForecastPoint[] {
   return response.points.map((point) => {
-    const hour = hourOf(point.timestamp)
-    const action: ForecastPoint['action'] = hour >= 11 && hour < 13 ? 'charge' : hour >= 20 && hour < 22 ? 'discharge' : 'hold'
-
     return {
       timestamp: point.timestamp,
       p10_price: point.lower_bound,
       p50_price: point.predicted_price,
       p90_price: point.upper_bound,
       actual_price: null,
-      action,
-      soc: action === 'charge' ? 0.62 : action === 'discharge' ? 0.74 : 0.5
+      action: 'hold',
+      soc: 0.5
     }
   })
 }
@@ -237,6 +227,10 @@ function mapSchedule(response: BackendScheduleResponse): ScheduleResponse {
     confidence: asConfidence(response.confidence),
     optimizer: response.optimizer,
     diagnostics: response.diagnostics,
+    single_profile_expected_value_range_eur: response.single_profile_expected_value_range_eur,
+    fleet_economics: response.fleet_economics,
+    forecast_provenance: response.forecast_provenance,
+    price_spread_diagnostics: response.price_spread_diagnostics,
     charge_window: response.charge_window,
     discharge_window: response.discharge_window,
     spread_after_efficiency: response.spread_after_efficiency,

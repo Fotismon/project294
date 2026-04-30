@@ -17,6 +17,11 @@ from app.scheduling.dispatch import (
     select_primary_discharge_window,
 )
 from app.scheduling.milp import MilpDispatchResult
+from app.scheduling.value_diagnostics import (
+    build_fleet_economics,
+    build_forecast_provenance,
+    build_price_spread_diagnostics,
+)
 
 
 def dispatch_block_to_schedule_window(block: DispatchBlock | None) -> Window:
@@ -324,6 +329,11 @@ def convert_milp_result_to_schedule_response(
 
     battery_stress = build_milp_battery_stress(result, profile)
     decision, confidence = classify_milp_response(result, diagnostics, battery_stress)
+    single_profile_expected_value_range = estimate_milp_expected_value_range(result)
+    fleet_economics = build_fleet_economics(
+        single_profile_expected_value_range_eur=single_profile_expected_value_range,
+        profile=profile,
+    )
 
     return ScheduleResponse(
         date=date,
@@ -337,7 +347,16 @@ def convert_milp_result_to_schedule_response(
             discharge_window,
             profile,
         ),
-        expected_value_range_eur=estimate_milp_expected_value_range(result),
+        expected_value_range_eur=single_profile_expected_value_range,
+        single_profile_expected_value_range_eur=single_profile_expected_value_range,
+        fleet_economics=fleet_economics,
+        forecast_provenance=build_forecast_provenance(),
+        price_spread_diagnostics=build_price_spread_diagnostics(
+            prices=prices,
+            charge_window=charge_window,
+            discharge_window=discharge_window,
+            profile=profile,
+        ),
         soc_feasibility=build_milp_soc_feasibility(result, profile),
         battery_stress=battery_stress,
         physical_constraints=build_milp_physical_constraints(result, profile),

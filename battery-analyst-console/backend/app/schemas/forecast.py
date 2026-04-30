@@ -20,6 +20,17 @@ class ForecastResponse(BaseModel):
         description="Average P05–P95 band width across all slots (EUR/MWh). "
         "Pass this as forecast_uncertainty_width in /schedule requests.",
     )
+    provenance: dict[str, str] = Field(
+        default_factory=lambda: {
+            "source": "open_meteo_weather_plus_lightgbm_price_forecast",
+            "weather_source": "Open-Meteo",
+            "weather_api_role": "Weather features only; not direct price data.",
+            "price_model": "LightGBM DAM price forecast",
+            "price_output": "Predicted day-ahead market price forecast",
+            "price_unit": "EUR/MWh",
+        },
+        description="Forecast provenance and unit metadata.",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -28,6 +39,14 @@ class ForecastResponse(BaseModel):
                 "market": "day_ahead",
                 "country": "GR",
                 "unit": "EUR/MWh",
+                "provenance": {
+                    "source": "open_meteo_weather_plus_lightgbm_price_forecast",
+                    "weather_source": "Open-Meteo",
+                    "weather_api_role": "Weather features only; not direct price data.",
+                    "price_model": "LightGBM DAM price forecast",
+                    "price_output": "Predicted day-ahead market price forecast",
+                    "price_unit": "EUR/MWh",
+                },
                 "points": [
                     {
                         "timestamp": "2026-04-29T11:00:00+03:00",

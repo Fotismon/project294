@@ -44,6 +44,11 @@ from app.scheduling.recommendation import (
     build_final_recommendation,
 )
 from app.scheduling.soc import filter_soc_feasible_schedules
+from app.scheduling.value_diagnostics import (
+    build_fleet_economics,
+    build_forecast_provenance,
+    build_price_spread_diagnostics,
+)
 from app.scheduling.windows import generate_rolling_windows
 
 
@@ -257,6 +262,24 @@ def recommendation_to_schedule_response(
     stress = selected.stress
     confidence = selected.confidence
     base_value = economic_schedule.net_spread_after_costs * soc_result.total_mwh_discharged
+    single_profile_expected_value_range = [
+        round(base_value * 0.85, 2),
+        round(base_value * 1.15, 2),
+    ]
+    charge_response_window = Window(
+        start=candidate.charge_window.start,
+        end=candidate.charge_window.end,
+        avg_price=candidate.charge_window.avg_price,
+    )
+    discharge_response_window = Window(
+        start=candidate.discharge_window.start,
+        end=candidate.discharge_window.end,
+        avg_price=candidate.discharge_window.avg_price,
+    )
+    fleet_economics = build_fleet_economics(
+        single_profile_expected_value_range_eur=single_profile_expected_value_range,
+        profile=profile,
+    )
     dispatch_plan = build_dispatch_plan_from_windows(
         charge_windows=[candidate.charge_window],
         discharge_windows=[candidate.discharge_window],
@@ -286,21 +309,19 @@ def recommendation_to_schedule_response(
         decision=recommendation.decision,
         confidence=confidence.level,
         optimizer=optimizer_metadata_for_request(request.optimizer_mode),
-        charge_window=Window(
-            start=candidate.charge_window.start,
-            end=candidate.charge_window.end,
-            avg_price=candidate.charge_window.avg_price,
-        ),
-        discharge_window=Window(
-            start=candidate.discharge_window.start,
-            end=candidate.discharge_window.end,
-            avg_price=candidate.discharge_window.avg_price,
-        ),
+        charge_window=charge_response_window,
+        discharge_window=discharge_response_window,
         spread_after_efficiency=economic_schedule.spread_after_efficiency,
-        expected_value_range_eur=[
-            round(base_value * 0.85, 2),
-            round(base_value * 1.15, 2),
-        ],
+        expected_value_range_eur=single_profile_expected_value_range,
+        single_profile_expected_value_range_eur=single_profile_expected_value_range,
+        fleet_economics=fleet_economics,
+        forecast_provenance=build_forecast_provenance(),
+        price_spread_diagnostics=build_price_spread_diagnostics(
+            prices=request.prices or [],
+            charge_window=charge_response_window,
+            discharge_window=discharge_response_window,
+            profile=profile,
+        ),
         soc_feasibility=SoCFeasibility(
             feasible=soc_result.feasible,
             min_soc=soc_result.min_soc_allowed,
@@ -376,6 +397,10 @@ def hold_schedule_response(
     hold_reasons = recommendation.hold_reasons or ["No feasible schedule found."]
     placeholder_window = Window(start="00:00", end="00:00", avg_price=0.0)
     diagnostics = build_empty_dispatch_diagnostics(profile)
+    fleet_economics = build_fleet_economics(
+        single_profile_expected_value_range_eur=[0.0, 0.0],
+        profile=profile,
+    )
 
     return ScheduleResponse(
         date=request.date,
@@ -386,6 +411,15 @@ def hold_schedule_response(
         discharge_window=placeholder_window,
         spread_after_efficiency=0.0,
         expected_value_range_eur=[0.0, 0.0],
+        single_profile_expected_value_range_eur=[0.0, 0.0],
+        fleet_economics=fleet_economics,
+        forecast_provenance=build_forecast_provenance(),
+        price_spread_diagnostics=build_price_spread_diagnostics(
+            prices=request.prices or [],
+            charge_window=placeholder_window,
+            discharge_window=placeholder_window,
+            profile=profile,
+        ),
         soc_feasibility=SoCFeasibility(
             feasible=False,
             min_soc=profile.soc_min,

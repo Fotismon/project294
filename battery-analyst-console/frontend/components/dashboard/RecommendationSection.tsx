@@ -177,6 +177,9 @@ function TopAlerts({ alerts }: { alerts: Alert[] }) {
 }
 
 export function RecommendationSection({ schedule, fleetRecommendation }: RecommendationSectionProps) {
+  const singleProfileValue = schedule.single_profile_expected_value_range_eur ?? schedule.expected_value_range_eur
+  const fleetValue = schedule.fleet_economics?.fleet_expected_value_range_eur ?? schedule.expected_value_range_eur
+
   if (schedule.decision === 'hold') {
     return (
       <div className="space-y-5">
@@ -225,8 +228,9 @@ export function RecommendationSection({ schedule, fleetRecommendation }: Recomme
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-secondary">{actionDescription(schedule)}</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Expected value" value={formatEuroRange(schedule.expected_value_range_eur)} tone="positive" />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <MetricCard label="Fleet expected value" value={formatEuroRange(fleetValue)} helperText={`${schedule.fleet_economics?.active_battery_count ?? 1} active batteries`} tone="positive" />
+          <MetricCard label="Single-profile value" value={formatEuroRange(singleProfileValue)} tone="info" />
           <MetricCard label="Spread after efficiency" value={formatSpread(schedule.spread_after_efficiency)} tone="info" />
           <MetricCard label="Manual overrides" value={fleetRecommendation.manual_override_count} />
           <MetricCard label="Override value delta" value={formatDelta(fleetRecommendation.override_value_delta_eur)} />

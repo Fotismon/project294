@@ -77,7 +77,6 @@ function hasMissingHistoricalData(result: BacktestResponse | null): boolean {
       normalized.includes('market_prices') ||
       normalized.includes('market price data') ||
       normalized.includes('unavailable') ||
-      normalized.includes('mock') ||
       normalized.includes('no data')
     )
   })
@@ -108,7 +107,7 @@ function MissingHistoricalDataState() {
       />
       <div className="mt-4 space-y-3 text-sm text-text-secondary">
         <p>
-          The backtest backend needs 96 interval rows for the selected date. Until historical data is available, the interface may show demo fallback results.
+          The backtest backend needs 96 interval rows for the selected date.
         </p>
         <p>Real backtesting is disabled until historical price data is provided.</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -117,8 +116,7 @@ function MissingHistoricalDataState() {
           <MissingDataNote label="Example path" value="data/market_prices.csv" />
         </div>
         <p className="text-xs text-text-muted">
-          Create battery-analyst-console/data/market_prices.csv with 96 rows per date. Until then, the UI may display
-          demo fallback results for continuity.
+          Create battery-analyst-console/data/market_prices.csv with 96 rows per date.
         </p>
       </div>
     </div>

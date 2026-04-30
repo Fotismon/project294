@@ -18,7 +18,7 @@ import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
 import { ScenarioComparisonPanel } from '@/components/dashboard/ScenarioComparisonPanel'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { ConsoleSectionId } from '@/components/dashboard/SideNav'
-import { clearApiFallback, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, runBacktest, runScenario } from '@/lib/api'
+import { clearApiFallback, getFleet, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, runBacktest, runScenario } from '@/lib/api'
 import {
   Alert,
   ApiStatus,
@@ -208,13 +208,15 @@ export default function Home() {
       try {
         const operatingDate = tomorrowAthens()
 
-        const [schedule, forecast] = await Promise.all([
+        const [schedule, forecast, fleet] = await Promise.all([
           getSchedule(operatingDate, 'balanced', optimizerMode),
-          getForecast(operatingDate)
+          getForecast(operatingDate),
+          getFleet()
         ])
         if (!mounted) return
         setScheduleData(schedule)
         setForecastData(forecast)
+        setFleetAssets(fleet.assets)
         setAlerts(scheduleAlertsOrFallback(schedule))
         const fallback = getLastApiFallback()
         if (!hasConfiguredApiBaseUrl()) {

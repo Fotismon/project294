@@ -36,6 +36,9 @@ function windowValue(window: ScheduleResponse['charge_window']): string {
 }
 
 export function RecommendationCards({ schedule }: RecommendationCardsProps) {
+  const singleProfileValue = schedule.single_profile_expected_value_range_eur ?? schedule.expected_value_range_eur
+  const fleetValue = schedule.fleet_economics?.fleet_expected_value_range_eur ?? schedule.expected_value_range_eur
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
@@ -45,9 +48,15 @@ export function RecommendationCards({ schedule }: RecommendationCardsProps) {
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <MetricCard
-          label="Expected value"
-          value={formatCurrencyRange(schedule.expected_value_range_eur)}
+          label="Fleet expected value"
+          value={formatCurrencyRange(fleetValue)}
+          helperText={`${schedule.fleet_economics?.active_battery_count ?? 1} active batteries`}
           tone="positive"
+        />
+        <MetricCard
+          label="Single-profile value"
+          value={formatCurrencyRange(singleProfileValue)}
+          tone="info"
         />
         <MetricCard
           label="Spread after efficiency"
