@@ -7,8 +7,8 @@ class ScenarioOverrideRequest(BaseModel):
     date: str = Field(..., description="Scenario target date in YYYY-MM-DD format.")
     profile_name: str = Field("balanced", description="Base battery operating profile name.")
     optimizer_mode: OptimizerMode = Field(
-        "window_v1",
-        description="Optimizer mode to use: window_v1, milp, or auto.",
+        "milp",
+        description="Optimizer mode to use. MILP is the only supported optimizer.",
     )
     prices: list[float] = Field(
         ...,
@@ -68,7 +68,7 @@ class ScenarioOverrideRequest(BaseModel):
             "example": {
                 "date": "2026-04-29",
                 "profile_name": "balanced",
-                "optimizer_mode": "window_v1",
+                "optimizer_mode": "milp",
                 "prices": [80.0] * 44 + [35.0] * 8 + [80.0] * 28 + [120.0] * 8 + [80.0] * 8,
                 "temperatures": [25.0] * 80 + [31.0] * 8 + [25.0] * 8,
                 "round_trip_efficiency": 0.9,

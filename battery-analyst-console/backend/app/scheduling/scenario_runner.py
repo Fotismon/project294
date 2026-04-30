@@ -33,7 +33,6 @@ from app.scheduling.milp import (
 )
 from app.scheduling.milp_response import convert_milp_result_to_schedule_response
 from app.scheduling.optimizer_metadata import (
-    build_optimizer_metadata,
     optimizer_metadata_for_request,
 )
 from app.scheduling.pairing import pair_charge_discharge_windows
@@ -54,7 +53,7 @@ from app.scheduling.windows import generate_rolling_windows
 
 ALLOWED_TEMPERATURE_POLICIES = {"relaxed", "normal", "strict"}
 ALLOWED_RISK_APPETITES = {"conservative", "balanced", "aggressive"}
-VALID_OPTIMIZER_MODES = {"window_v1", "milp", "auto"}
+VALID_OPTIMIZER_MODES = {"milp"}
 
 
 def apply_scenario_overrides(
@@ -113,117 +112,25 @@ def run_scenario_analysis(request: ScenarioOverrideRequest) -> ScheduleResponse:
     base_profile = get_battery_profile(request.profile_name)
     profile = apply_scenario_overrides(base_profile, request)
 
-    if request.optimizer_mode == "window_v1":
-        return run_window_scenario_analysis(request, profile)
-
-    if request.optimizer_mode == "milp":
-        try:
-            return run_milp_scenario_analysis(request, profile, requested_mode="milp")
-        except Exception as error:
-            failed_result = build_failed_milp_result(
-                solver_status="error",
-                error_message=f"MILP failed: {error}.",
-            )
-            response = convert_milp_result_to_schedule_response(
-                result=failed_result,
-                prices=request.prices,
-                profile=profile,
-                date=request.date,
-                requested_mode="milp",
-            )
-            return add_scenario_metadata_to_response(
-                response=response,
-                request=request,
-                effective_margin=None,
-            )
-
     try:
-        milp_response = run_milp_scenario_analysis(
-            request,
-            profile,
-            requested_mode="auto",
-        )
+        return run_milp_scenario_analysis(request, profile, requested_mode="milp")
     except Exception as error:
-        return run_window_scenario_fallback(
-            request=request,
-            profile=profile,
-            fallback_reason=f"MILP failed: {error}. Used window_v1 scheduler.",
+        failed_result = build_failed_milp_result(
             solver_status="error",
+            error_message=f"MILP failed: {error}.",
         )
-
-    if milp_response.optimizer.is_optimal:
-        return milp_response
-
-    fallback_reason = (
-        milp_response.optimizer.fallback_reason
-        or "MILP did not return an optimal dispatch. Used window_v1 scheduler."
-    )
-    return run_window_scenario_fallback(
-        request=request,
-        profile=profile,
-        fallback_reason=fallback_reason,
-        solver_status=milp_response.optimizer.solver_status,
-    )
-
-
-def run_window_scenario_analysis(
-    request: ScenarioOverrideRequest,
-    profile: BatteryOperatingProfile | None = None,
-) -> ScheduleResponse:
-    """Run the MVP scenario analysis pipeline and return a ScheduleResponse."""
-
-    if profile is None:
-        base_profile = get_battery_profile(request.profile_name)
-        profile = apply_scenario_overrides(base_profile, request)
-
-    # This endpoint uses the real internal scheduling pipeline for scenario analysis.
-    # It is still an MVP and uses simplified expected value and feasibility calculations.
-    windows = generate_rolling_windows(request.prices, request.temperatures)
-    _, v12_discharge_windows, v12_explanation = select_profitable_dispatch_windows(
-        windows=windows,
-        profile=profile,
-    )
-    pairs = pair_charge_discharge_windows(
-        charge_windows=windows,
-        discharge_windows=windows,
-        min_rest_between_actions_minutes=profile.min_rest_between_actions_minutes,
-        max_pairs=100,
-    )
-    effective_margin = scenario_minimum_margin(
-        request.minimum_margin_eur_per_mwh,
-        request.risk_appetite,
-    )
-    economic = filter_economic_schedules(
-        candidates=pairs,
-        profile=profile,
-        minimum_margin_eur_per_mwh=effective_margin,
-        max_results=50,
-    )
-    physical = filter_physical_constraints(
-        economic_schedules=economic,
-        profile=profile,
-        max_results=25,
-    )
-    soc_results = filter_soc_feasible_schedules(
-        physical_results=physical,
-        profile=profile,
-        max_results=10,
-    )
-    recommendation = build_final_recommendation(
-        soc_results=soc_results,
-        forecast_confidence=request.forecast_confidence,
-        market_volatility=request.market_volatility,
-        forecast_uncertainty_width=request.forecast_uncertainty_width,
-        data_quality_level=request.data_quality_level,
-    )
-
-    return recommendation_to_schedule_response(
-        recommendation=recommendation,
-        request=request,
-        profile=profile,
-        effective_margin=effective_margin,
-        dispatch_explanation=v12_explanation if v12_discharge_windows else [],
-    )
+        response = convert_milp_result_to_schedule_response(
+            result=failed_result,
+            prices=request.prices,
+            profile=profile,
+            date=request.date,
+            requested_mode="milp",
+        )
+        return add_scenario_metadata_to_response(
+            response=response,
+            request=request,
+            effective_margin=None,
+        )
 
 
 def run_milp_scenario_analysis(
@@ -251,28 +158,6 @@ def run_milp_scenario_analysis(
         response=response,
         request=request,
         effective_margin=effective_margin,
-    )
-
-
-def run_window_scenario_fallback(
-    request: ScenarioOverrideRequest,
-    profile: BatteryOperatingProfile,
-    fallback_reason: str,
-    solver_status: str | None,
-) -> ScheduleResponse:
-    response = run_window_scenario_analysis(request, profile)
-    return response.model_copy(
-        update={
-            "optimizer": build_optimizer_metadata(
-                requested_mode="auto",
-                used_mode="window_v1",
-                fallback_used=True,
-                fallback_reason=fallback_reason,
-                model_version="window_v1.2",
-                is_optimal=False,
-                solver_status=solver_status,
-            )
-        }
     )
 
 

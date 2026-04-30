@@ -31,7 +31,6 @@ import {
   FleetRecommendation,
   FleetSummary,
   ForecastPoint,
-  OptimizerMode,
   RiskAppetite,
   ScheduleResponse,
   TemperaturePolicy
@@ -206,7 +205,7 @@ export default function Home() {
   const [degradationCost, setDegradationCost] = useState(10)
   const [riskAppetite, setRiskAppetite] = useState<RiskAppetite>('balanced')
   const [temperaturePolicy, setTemperaturePolicy] = useState<TemperaturePolicy>('normal')
-  const [optimizerMode, setOptimizerMode] = useState<OptimizerMode>('window_v1')
+  const optimizerMode = 'milp' as const
   const [isScenarioRunning, setIsScenarioRunning] = useState(false)
   const [baseScenarioSchedule, setBaseScenarioSchedule] = useState<ScheduleResponse | null>(null)
   const [scenarioResult, setScenarioResult] = useState<ScheduleResponse | null>(null)
@@ -308,7 +307,7 @@ export default function Home() {
     return () => {
       mounted = false
     }
-  }, [optimizerMode])
+  }, [])
 
   function handleToggleSelected(id: string) {
     setSelectedAssetIds((current) => current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id])
@@ -495,20 +494,6 @@ export default function Home() {
             fleetAssets={displayFleetAssets}
             alerts={alerts}
             fleetSummary={fleetSummary}
-            fleetRecommendation={fleetRecommendation}
-            selectedAssetIds={selectedAssetIds}
-            selectedAssetId={selectedAssetId}
-            selectedAsset={selectedAsset}
-            onSelectAll={() => setSelectedAssetIds(displayFleetAssets.map((asset) => asset.id))}
-            onClearSelection={handleClearSelection}
-            onToggleSelected={handleToggleSelected}
-            onApplyAction={handleApplyBulkAction}
-            onAssetActionChange={handleAssetActionChange}
-            onOpenAssetDetail={setSelectedAssetId}
-            onCloseAssetDetail={() => setSelectedAssetId(null)}
-            optimizerMode={optimizerMode}
-            onOptimizerModeChange={setOptimizerMode}
-            isOptimizerLoading={isLoading}
           />
         )}
         {activeSection === 'fleet' && !scheduleData && <LiveDataUnavailablePanel />}
@@ -555,8 +540,6 @@ export default function Home() {
                   onRiskAppetiteChange={setRiskAppetite}
                   temperaturePolicy={temperaturePolicy}
                   onTemperaturePolicyChange={setTemperaturePolicy}
-                  optimizerMode={optimizerMode}
-                  onOptimizerModeChange={setOptimizerMode}
                   onRunScenario={handleRunScenario}
                   isRunning={isScenarioRunning}
                 />

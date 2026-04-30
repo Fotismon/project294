@@ -39,7 +39,6 @@ from app.scheduling.milp import (
 )
 from app.scheduling.milp_response import convert_milp_result_to_schedule_response
 from app.scheduling.optimizer_metadata import (
-    build_optimizer_metadata,
     optimizer_metadata_for_request,
 )
 from app.scheduling.pairing import pair_charge_discharge_windows
@@ -58,7 +57,7 @@ from app.scheduling.value_diagnostics import (
 from app.scheduling.windows import generate_rolling_windows
 
 
-VALID_OPTIMIZER_MODES = {"window_v1", "milp", "auto"}
+VALID_OPTIMIZER_MODES = {"milp"}
 
 
 def _resolve_prices(
@@ -132,137 +131,39 @@ def run_schedule_analysis(request: ScheduleRequest) -> ScheduleResponse:
     validate_optimizer_mode(request.optimizer_mode)
 
     p50, p05, p95, uncertainty_width, auto_fetched = _resolve_prices(request)
-    optimizer_prices = _blend_risk_prices(p50, p05, p95, uncertainty_width)
-
-    extra_margin = min(10.0, max(0.0, (uncertainty_width - 20.0) / 10.0))
-    effective_margin = request.minimum_margin_eur_per_mwh + extra_margin
 
     augmented = request.model_copy(update={
-        "prices": optimizer_prices,
+        "prices": p50,
         "forecast_uncertainty_width": uncertainty_width,
-        "minimum_margin_eur_per_mwh": effective_margin,
+        "optimizer_mode": "milp",
     })
-    milp_request = augmented.model_copy(update={"prices": p50})
 
     # p50 (unblended) used as the reference baseline in price spread diagnostics
     reference_prices = p50 if auto_fetched else None
     profile = get_battery_profile(augmented.profile_name)
 
-    if augmented.optimizer_mode == "window_v1":
-        return run_window_schedule_analysis(augmented, profile, reference_prices=reference_prices)
-
-    if augmented.optimizer_mode == "milp":
-        try:
-            return run_milp_schedule_analysis(
-                milp_request,
-                profile,
-                requested_mode="milp",
-                reference_prices=reference_prices,
-                charge_prices=p05,
-                discharge_prices=p95,
-            )
-        except Exception as error:
-            failed_result = build_failed_milp_result(
-                solver_status="error",
-                error_message=f"MILP failed: {error}.",
-            )
-            return convert_milp_result_to_schedule_response(
-                result=failed_result,
-                prices=milp_request.prices,
-                profile=profile,
-                date=milp_request.date,
-                requested_mode="milp",
-                reference_prices=reference_prices,
-            )
-
     try:
-        milp_response = run_milp_schedule_analysis(
-            milp_request,
+        return run_milp_schedule_analysis(
+            augmented,
             profile,
-            requested_mode="auto",
+            requested_mode="milp",
             reference_prices=reference_prices,
             charge_prices=p05,
             discharge_prices=p95,
         )
     except Exception as error:
-        return run_window_schedule_fallback(
-            request=augmented,
-            profile=profile,
-            fallback_reason=f"MILP failed: {error}. Used window_v1 scheduler.",
+        failed_result = build_failed_milp_result(
             solver_status="error",
+            error_message=f"MILP failed: {error}.",
+        )
+        return convert_milp_result_to_schedule_response(
+            result=failed_result,
+            prices=augmented.prices,
+            profile=profile,
+            date=augmented.date,
+            requested_mode="milp",
             reference_prices=reference_prices,
         )
-
-    if milp_response.optimizer.is_optimal:
-        return milp_response
-
-    fallback_reason = (
-        milp_response.optimizer.fallback_reason
-        or "MILP did not return an optimal dispatch. Used window_v1 scheduler."
-    )
-    return run_window_schedule_fallback(
-        request=augmented,
-        profile=profile,
-        fallback_reason=fallback_reason,
-        solver_status=milp_response.optimizer.solver_status,
-        reference_prices=reference_prices,
-    )
-
-
-def run_window_schedule_analysis(
-    request: ScheduleRequest,
-    profile: BatteryOperatingProfile | None = None,
-    reference_prices: list[float] | None = None,
-) -> ScheduleResponse:
-    """Run the normal scheduling pipeline and return a ScheduleResponse."""
-
-    if request.prices is None:
-        raise ValueError("prices are required for real schedule generation.")
-
-    profile = profile or get_battery_profile(request.profile_name)
-
-    windows = generate_rolling_windows(request.prices, request.temperatures)
-    _, v12_discharge_windows, v12_explanation = select_profitable_dispatch_windows(
-        windows=windows,
-        profile=profile,
-    )
-    pairs = pair_charge_discharge_windows(
-        charge_windows=windows,
-        discharge_windows=windows,
-        min_rest_between_actions_minutes=profile.min_rest_between_actions_minutes,
-        max_pairs=100,
-    )
-    economic = filter_economic_schedules(
-        candidates=pairs,
-        profile=profile,
-        minimum_margin_eur_per_mwh=request.minimum_margin_eur_per_mwh,
-        max_results=50,
-    )
-    physical = filter_physical_constraints(
-        economic_schedules=economic,
-        profile=profile,
-        max_results=25,
-    )
-    soc_results = filter_soc_feasible_schedules(
-        physical_results=physical,
-        profile=profile,
-        max_results=10,
-    )
-    recommendation = build_final_recommendation(
-        soc_results=soc_results,
-        forecast_confidence=request.forecast_confidence,
-        market_volatility=request.market_volatility,
-        forecast_uncertainty_width=request.forecast_uncertainty_width,
-        data_quality_level=request.data_quality_level,
-    )
-
-    return recommendation_to_schedule_response(
-        recommendation=recommendation,
-        request=request,
-        profile=profile,
-        dispatch_explanation=v12_explanation if v12_discharge_windows else [],
-        reference_prices=reference_prices,
-    )
 
 
 def run_milp_schedule_analysis(
@@ -290,29 +191,6 @@ def run_milp_schedule_analysis(
         date=request.date,
         requested_mode=requested_mode,
         reference_prices=reference_prices,
-    )
-
-
-def run_window_schedule_fallback(
-    request: ScheduleRequest,
-    profile: BatteryOperatingProfile,
-    fallback_reason: str,
-    solver_status: str | None,
-    reference_prices: list[float] | None = None,
-) -> ScheduleResponse:
-    response = run_window_schedule_analysis(request, profile, reference_prices=reference_prices)
-    return response.model_copy(
-        update={
-            "optimizer": build_optimizer_metadata(
-                requested_mode="auto",
-                used_mode="window_v1",
-                fallback_used=True,
-                fallback_reason=fallback_reason,
-                model_version="window_v1.2",
-                is_optimal=False,
-                solver_status=solver_status,
-            )
-        }
     )
 
 

@@ -286,7 +286,7 @@ function forecastToScheduleInputs(raw: BackendForecastResponse): {
 function scheduleRequest(
   date: string,
   batteryProfile?: RiskAppetite | string,
-  optimizerMode: OptimizerMode = 'window_v1',
+  optimizerMode: OptimizerMode = 'milp',
   forecastInput?: { prices: number[]; forecast_uncertainty_width: number; forecast_confidence: Confidence }
 ): BackendScheduleRequest {
   if (!forecastInput || forecastInput.prices.length !== 96) {
@@ -317,7 +317,7 @@ function scenarioRequest(payload: ScenarioRequest): BackendScenarioRequest {
   return {
     date: payload.date,
     profile_name: profile,
-    optimizer_mode: payload.optimizer_mode ?? 'window_v1',
+    optimizer_mode: payload.optimizer_mode ?? 'milp',
     prices: payload.prices,
     temperatures: payload.temperatures?.length ? payload.temperatures : null,
     round_trip_efficiency: normalizeEfficiency(payload.round_trip_efficiency),
@@ -338,7 +338,7 @@ function backtestRequest(payload: BacktestRequest): BackendBacktestRequest {
   return {
     date: payload.date,
     profile_name: payload.profile_name ?? payload.battery_profile ?? 'balanced',
-    optimizer_mode: payload.optimizer_mode ?? 'window_v1',
+    optimizer_mode: payload.optimizer_mode ?? 'milp',
     lookback_days: payload.lookback_days ?? 7,
     forecast_method: payload.forecast_method ?? 'day_ahead_lightgbm',
     market_volatility: payload.market_volatility ?? 'medium',
@@ -400,7 +400,7 @@ export async function getForecast(date: string): Promise<ForecastPoint[]> {
   }
 }
 
-export async function getSchedule(date: string, batteryProfile?: RiskAppetite | string, optimizerMode: OptimizerMode = 'window_v1'): Promise<ScheduleResponse> {
+export async function getSchedule(date: string, batteryProfile?: RiskAppetite | string, optimizerMode: OptimizerMode = 'milp'): Promise<ScheduleResponse> {
   requireApiBaseUrl()
 
   try {

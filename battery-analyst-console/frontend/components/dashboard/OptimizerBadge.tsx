@@ -12,13 +12,10 @@ interface OptimizerBadgeProps {
 
 function modeLabel(mode: string | undefined): string {
   if (mode === 'milp') return 'MILP'
-  if (mode === 'window_v1') return 'Window V1'
-  if (mode === 'auto') return 'Auto'
   return mode ? mode.replace(/_/g, ' ') : 'Unknown'
 }
 
 function versionLabel(version: string): string {
-  if (version === 'window_v1.2') return 'v1.2'
   if (version === 'milp_v1') return 'MILP v1'
   return version
 }
@@ -28,8 +25,7 @@ function optimizerTone(optimizer?: OptimizerMetadata | null): BadgeTone {
   if (optimizer.fallback_used) return 'warning'
   if (optimizer.used_mode === 'milp' && optimizer.is_optimal) return 'positive'
   if (optimizer.used_mode === 'milp') return optimizer.solver_status && optimizer.solver_status !== 'optimal' ? 'warning' : 'info'
-  if (optimizer.solver_status === 'infeasible' || optimizer.solver_status === 'not_implemented') return 'warning'
-  return 'info'
+  return 'warning'
 }
 
 function primaryLabel(optimizer?: OptimizerMetadata | null): string {

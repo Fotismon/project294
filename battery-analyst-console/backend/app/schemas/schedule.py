@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-OptimizerMode = Literal["window_v1", "milp", "auto"]
+OptimizerMode = Literal["milp"]
 
 
 class OptimizerMetadata(BaseModel):
@@ -63,8 +63,8 @@ class ScheduleRequest(BaseModel):
     date: str = Field(..., description="Schedule date in YYYY-MM-DD format.")
     profile_name: str = Field("balanced", description="Battery operating profile name.")
     optimizer_mode: OptimizerMode = Field(
-        "window_v1",
-        description="Optimizer mode to use: window_v1, milp, or auto.",
+        "milp",
+        description="Optimizer mode to use. MILP is the only supported optimizer.",
     )
     prices: list[float] | None = Field(
         None,
@@ -102,7 +102,7 @@ class ScheduleRequest(BaseModel):
             "example": {
                 "date": "2026-04-29",
                 "profile_name": "balanced",
-                "optimizer_mode": "window_v1",
+                "optimizer_mode": "milp",
                 "prices": [80.0] * 44 + [35.0] * 8 + [80.0] * 28 + [120.0] * 8 + [80.0] * 8,
                 "temperatures": [25.0] * 80 + [31.0] * 8 + [25.0] * 8,
                 "forecast_confidence": "medium_high",
@@ -365,13 +365,13 @@ class ScheduleResponse(BaseModel):
                 "decision": "execute_with_caution",
                 "confidence": "medium_high",
                 "optimizer": {
-                    "requested_mode": "window_v1",
-                    "used_mode": "window_v1",
+                    "requested_mode": "milp",
+                    "used_mode": "milp",
                     "fallback_used": False,
                     "fallback_reason": None,
-                    "model_version": "window_v1.2",
-                    "is_optimal": False,
-                    "solver_status": None,
+                    "model_version": "milp_v1",
+                    "is_optimal": True,
+                    "solver_status": "optimal",
                 },
                 "charge_window": {
                     "start": "11:00",

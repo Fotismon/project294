@@ -34,34 +34,22 @@ For RTE 0.85, charge 30 €/MWh, and degradation 20 €/MWh:
 - 80 €/MWh discharge yields 24.71 €/MWh net profit.
 - 120 €/MWh discharge yields 64.71 €/MWh net profit.
 
-## Window Scheduler V1.2
-
-The window scheduler now has an interval-level dispatch representation with
-`charge_power_mw[96]`, `discharge_power_mw[96]`, `net_power_mw[96]`, and
-`soc_trajectory[97]`. Dispatch blocks are extracted from these vectors so the
-same shape can later describe MILP output.
-
-V1.2 can identify multiple profitable discharge windows using the hurdle-cost
-profitability check while keeping the public `charge_window` and
-`discharge_window` fields for frontend compatibility. The primary response
-windows represent the lowest-price charge block and highest-price discharge
-block; additional selected dispatch blocks are described in explanation lines.
-
 ## Dispatch diagnostics
 
 Schedule and scenario responses include physical dispatch diagnostics for the
-window scheduler. The diagnostics report equivalent full cycles, auxiliary load
+MILP scheduler. The diagnostics report equivalent full cycles, auxiliary load
 and auxiliary energy, simultaneous charge/discharge violations, grid connection
 limit checks, terminal SoC error, SoC violation counts, and ramp-rate
 violations.
 
-These judge-facing metrics are computed for the current window scheduler and
-use the same dispatch-vector shape that future MILP output can populate.
+These judge-facing metrics are computed from MILP dispatch vectors:
+`charge_power_mw[96]`, `discharge_power_mw[96]`, `net_power_mw[96]`, and
+`soc_trajectory[97]`.
 
 ## MILP optimizer v1
 
-`milp.py` contains a standalone PuLP-based battery dispatch optimizer. It is not
-connected to `/schedule` or `/scenario` yet. The model enforces SoC bounds,
+`milp.py` contains the PuLP-based battery dispatch optimizer used by
+`/schedule`, `/scenario`, and `/backtest`. The model enforces SoC bounds,
 charge/discharge power limits, mutual exclusivity, daily cycle throughput,
 terminal SoC tolerance, ramp-rate limits, grid connection limits, degradation
 cost, and auxiliary load in the objective.
@@ -79,19 +67,17 @@ python -m app.scheduling.milp_example
 and discharge windows are extracted from dispatch blocks, diagnostics are
 preserved, and optimizer metadata identifies the result as `milp_v1`.
 
-API integration and fallback behavior are intentionally left for a later phase.
-
 ## Optimizer modes
 
-`/schedule` and `/scenario` accept `optimizer_mode`:
+`/schedule`, `/scenario`, and `/backtest` use `optimizer_mode: milp`.
 
-- `window_v1`: transparent window-based scheduler.
-- `milp`: mixed-integer optimizer over 96 intervals.
-- `auto`: try MILP first, then fall back to `window_v1`.
+MILP is now the only optimizer exposed through the API. It solves the
+96-interval battery dispatch problem with SoC bounds, power limits, mutual
+exclusivity, cycle limits, terminal SoC, ramp-rate constraints, degradation
+cost, and auxiliary load in the objective.
 
-Forced `milp` returns a valid hold response if MILP is infeasible or unavailable.
-`auto` returns a `window_v1` response with `fallback_used=true` and a clear
-fallback reason if MILP fails.
+If MILP is infeasible or unavailable, the API returns a valid hold response with
+MILP solver metadata.
 
 ## Forecast provenance and fleet economics
 

@@ -2,13 +2,12 @@
 
 import React from 'react'
 import { ForecastPoint, ScheduleResponse, Window } from '@/types/api'
-import { ConfidenceBadge, DecisionBadge, MetricCard, SectionPanel, StatusBadge } from '@/components/ui'
+import { ConfidenceBadge, MetricCard, SectionPanel, StatusBadge } from '@/components/ui'
 import { ForecastChart } from './ForecastChart'
 
 interface MarketForecastSectionProps {
   forecastData: ForecastPoint[]
   schedule: ScheduleResponse
-  currentSignal: 'charge' | 'discharge' | 'idle' | 'mixed'
 }
 
 function formatEuro(value: number): string {
@@ -37,15 +36,37 @@ function isExecutableWindow(window: Window | null | undefined): window is Window
   return Boolean(window && window.start !== window.end && window.start !== '00:00' && window.end !== '00:00')
 }
 
-function signalTone(signal: MarketForecastSectionProps['currentSignal']): 'positive' | 'warning' | 'info' | 'neutral' {
+type MarketSignal = 'charge' | 'discharge' | 'idle' | 'mixed'
+
+function signalTone(signal: MarketSignal): 'positive' | 'warning' | 'info' | 'neutral' {
   if (signal === 'charge') return 'positive'
   if (signal === 'discharge') return 'info'
   if (signal === 'mixed') return 'warning'
   return 'neutral'
 }
 
-function signalLabel(signal: MarketForecastSectionProps['currentSignal']): string {
+function signalLabel(signal: MarketSignal): string {
   return signal.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function decisionLabel(schedule: ScheduleResponse): string {
+  if (schedule.decision === 'execute') return 'Charge'
+  if (schedule.decision === 'execute_with_caution') return 'Charge with caution'
+  if (schedule.decision === 'watch') return 'Watch'
+  return 'Hold'
+}
+
+function decisionTone(schedule: ScheduleResponse): 'positive' | 'warning' | 'info' | 'critical' {
+  if (schedule.decision === 'execute') return 'positive'
+  if (schedule.decision === 'execute_with_caution') return 'warning'
+  if (schedule.decision === 'watch') return 'info'
+  return 'critical'
+}
+
+function signalFromSchedule(schedule: ScheduleResponse, hasTradeWindows: boolean): MarketSignal {
+  if (schedule.decision === 'hold' || !hasTradeWindows) return 'idle'
+  if (schedule.decision === 'execute' || schedule.decision === 'execute_with_caution') return 'charge'
+  return 'mixed'
 }
 
 function operatingReason(schedule: ScheduleResponse, hasTradeWindows: boolean): string {
@@ -83,10 +104,11 @@ function LegendItem({ label, className }: { label: string; className: string }) 
   )
 }
 
-export function MarketForecastSection({ forecastData, schedule, currentSignal }: MarketForecastSectionProps) {
+export function MarketForecastSection({ forecastData, schedule }: MarketForecastSectionProps) {
   const hasChargeWindow = isExecutableWindow(schedule.charge_window)
   const hasDischargeWindow = isExecutableWindow(schedule.discharge_window)
   const hasTradeWindows = hasChargeWindow && hasDischargeWindow
+  const currentSignal = signalFromSchedule(schedule, hasTradeWindows)
 
   return (
     <SectionPanel
@@ -96,7 +118,7 @@ export function MarketForecastSection({ forecastData, schedule, currentSignal }:
     >
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-          <MetricCard label="Decision" value={<DecisionBadge decision={schedule.decision} size="md" />} />
+          <MetricCard label="Decision" value={<StatusBadge label={decisionLabel(schedule)} tone={decisionTone(schedule)} size="md" dot />} />
           <MetricCard label="Confidence" value={<ConfidenceBadge confidence={schedule.confidence} size="md" />} />
           <MetricCard label="Spread after efficiency" value={formatSpread(schedule.spread_after_efficiency)} tone="info" />
           <MetricCard label="Expected value" value={formatEuroRange(schedule.expected_value_range_eur)} tone="positive" />

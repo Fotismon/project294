@@ -5,31 +5,25 @@ import {
   Alert,
   BatteryAction,
   BatteryAsset,
-  FleetRecommendation,
   FleetSummary,
   ForecastPoint,
-  OptimizerMode,
   ScheduleResponse
 } from '@/types/api'
 import {
   ConfidenceBadge,
-  DecisionBadge,
   EmptyState,
   MetricCard,
   SectionPanel,
-  StressBadge
+  StatusBadge
 } from '@/components/ui'
-import { BatteryAssetDetailPanel } from './BatteryAssetDetailPanel'
+import { AlternativesPanel } from './AlternativesPanel'
+import { ConstraintPanel } from './ConstraintPanel'
 import { DispatchDiagnosticsPanel } from './DispatchDiagnosticsPanel'
 import { FleetAlertsPanel } from './FleetAlertsPanel'
-import { FleetManagerSection } from './FleetManagerSection'
 import { MarketForecastSection } from './MarketForecastSection'
-import { OpinionatedRecommendationPanel } from './OpinionatedRecommendationPanel'
 import { OptimizerBadge } from './OptimizerBadge'
-import { OptimizerModeSelector } from './OptimizerModeSelector'
 import { ProfitHealthComparisonCard } from './ProfitHealthComparisonCard'
-import { RecommendationSection } from './RecommendationSection'
-import { ScheduleTradeoffMatrix } from './ScheduleTradeoffMatrix'
+import { SoCFeasibilityCard } from './SoCFeasibilityCard'
 import { ValueDiagnosticsPanel } from './ValueDiagnosticsPanel'
 
 interface FleetOverviewProps {
@@ -38,20 +32,6 @@ interface FleetOverviewProps {
   fleetAssets: BatteryAsset[]
   alerts: Alert[]
   fleetSummary: FleetSummary
-  fleetRecommendation: FleetRecommendation
-  selectedAssetIds: string[]
-  selectedAssetId: string | null
-  selectedAsset: BatteryAsset | null
-  onSelectAll: () => void
-  onClearSelection: () => void
-  onToggleSelected: (id: string) => void
-  onApplyAction: (action: BatteryAction) => void
-  onAssetActionChange: (id: string, action: BatteryAction) => void
-  onOpenAssetDetail: (assetId: string) => void
-  onCloseAssetDetail: () => void
-  optimizerMode: OptimizerMode
-  onOptimizerModeChange: (mode: OptimizerMode) => void
-  isOptimizerLoading?: boolean
 }
 
 function formatEuro(value: number): string {
@@ -100,21 +80,7 @@ export function FleetOverview({
   forecastData,
   fleetAssets,
   alerts,
-  fleetSummary,
-  fleetRecommendation,
-  selectedAssetIds,
-  selectedAssetId,
-  selectedAsset,
-  onSelectAll,
-  onClearSelection,
-  onToggleSelected,
-  onApplyAction,
-  onAssetActionChange,
-  onOpenAssetDetail,
-  onCloseAssetDetail,
-  optimizerMode,
-  onOptimizerModeChange,
-  isOptimizerLoading = false
+  fleetSummary
 }: FleetOverviewProps) {
   const hasAlerts = alerts.length > 0 || hasGeneratedAssetAlerts(fleetAssets)
   const singleProfileValue = schedule.single_profile_expected_value_range_eur ?? schedule.expected_value_range_eur
@@ -127,70 +93,38 @@ export function FleetOverview({
           <h2 className="text-2xl font-semibold text-text-primary">Fleet Overview</h2>
           <p className="mt-1 text-sm text-text-secondary">Portfolio decision, market signal, asset actions, and operational risk.</p>
         </div>
-        <div className="flex flex-col items-start gap-3 sm:items-end">
-          <OptimizerModeSelector
-            value={optimizerMode}
-            onChange={onOptimizerModeChange}
-            disabled={isOptimizerLoading}
-            compact
-          />
-          <OptimizerBadge optimizer={schedule.optimizer} />
-        </div>
+        <OptimizerBadge optimizer={schedule.optimizer} />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 min-[1440px]:grid-cols-7">
-        <MetricCard label="Decision" value={<DecisionBadge decision={schedule.decision} size="md" />} />
+        <MetricCard label="Decision" value={<FleetDecisionBadge decision={schedule.decision} />} />
         <MetricCard label="Confidence" value={<ConfidenceBadge confidence={schedule.confidence} size="md" />} />
         <MetricCard label="Fleet value" value={formatEuroRange(fleetValue)} helperText={`${schedule.fleet_economics?.active_battery_count ?? fleetSummary.available_assets} active batteries`} tone="positive" />
         <MetricCard label="Single-profile value" value={formatEuroRange(singleProfileValue)} tone="info" />
         <MetricCard label="Spread after efficiency" value={formatSpread(schedule.spread_after_efficiency)} tone="info" />
         <MetricCard label="Fleet availability" value={`${fleetSummary.available_assets}/${fleetSummary.total_assets}`} helperText={`${formatPercent(fleetSummary.average_soc)} average SoC`} />
-        <MetricCard label="Battery stress" value={<StressBadge level={schedule.battery_stress.level} score={schedule.battery_stress.score} size="md" />} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 min-[1440px]:grid-cols-[minmax(0,2fr)_minmax(320px,0.9fr)]">
         <div className="space-y-6">
-          {schedule.decision === 'hold' && (
-            <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
-          )}
-
           <SectionPanel title="Market Forecast" subtitle="Price signal and recommended operating windows.">
             <MarketForecastSection
               forecastData={forecastData}
               schedule={schedule}
-              currentSignal={fleetSummary.forecast_driven_action}
             />
           </SectionPanel>
-
-          {schedule.decision !== 'hold' && (
-            <RecommendationSection schedule={schedule} fleetRecommendation={fleetRecommendation} />
-          )}
-
-          <OpinionatedRecommendationPanel schedule={schedule} />
 
           <ProfitHealthComparisonCard schedule={schedule} />
 
-          <ScheduleTradeoffMatrix schedule={schedule} />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <ConstraintPanel constraints={schedule.physical_constraints} />
+            <SoCFeasibilityCard feasibility={schedule.soc_feasibility} />
+          </div>
 
-          <SectionPanel title="Battery Assets" subtitle="Asset-level status, controls, and operating decision.">
-            <FleetManagerSection
-              assets={fleetAssets}
-              summary={fleetSummary}
-              selectedIds={selectedAssetIds}
-              selectedAssetId={selectedAssetId}
-              onSelectAll={onSelectAll}
-              onClearSelection={onClearSelection}
-              onToggleSelected={onToggleSelected}
-              onApplyAction={onApplyAction}
-              onAssetActionChange={onAssetActionChange}
-              onOpenAssetDetail={onOpenAssetDetail}
-            />
-          </SectionPanel>
+          <AlternativesPanel alternatives={schedule.alternatives} />
         </div>
 
         <div className="space-y-6">
-          <BatteryAssetDetailPanel asset={selectedAsset} schedule={schedule} onClose={onCloseAssetDetail} />
-
           <SectionPanel title="Operational Alerts" subtitle="Risks from the latest schedule or scenario.">
             {hasAlerts ? (
               <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />
@@ -208,4 +142,17 @@ export function FleetOverview({
       </div>
     </div>
   )
+}
+
+function FleetDecisionBadge({ decision }: { decision: ScheduleResponse['decision'] }) {
+  if (decision === 'execute') {
+    return <StatusBadge label="Charge" tone="positive" size="md" dot />
+  }
+  if (decision === 'execute_with_caution') {
+    return <StatusBadge label="Charge with caution" tone="warning" size="md" dot />
+  }
+  if (decision === 'watch') {
+    return <StatusBadge label="Watch" tone="info" size="md" dot />
+  }
+  return <StatusBadge label="Hold" tone="critical" size="md" dot />
 }

@@ -16,7 +16,7 @@ export type BatteryAction = 'auto' | 'charge' | 'discharge' | 'idle'
 export type EffectiveBatteryAction = Exclude<BatteryAction, 'auto'>
 export type FleetForecastAction = EffectiveBatteryAction | 'mixed'
 export type ApiStatusKind = 'connected' | 'error' | 'loading'
-export type OptimizerMode = 'window_v1' | 'milp' | 'auto'
+export type OptimizerMode = 'milp'
 
 export interface ApiStatus {
   kind: ApiStatusKind
@@ -134,7 +134,7 @@ export interface Alert {
 
 export interface OptimizerMetadata {
   requested_mode: OptimizerMode | string
-  used_mode: 'window_v1' | 'milp' | string
+  used_mode: 'milp' | string
   fallback_used: boolean
   fallback_reason: string | null
   model_version: string

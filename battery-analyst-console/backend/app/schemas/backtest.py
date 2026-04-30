@@ -7,8 +7,8 @@ class BacktestRequest(BaseModel):
     date: str = Field(..., description="Historical backtest date in YYYY-MM-DD format.")
     profile_name: str = Field("balanced", description="Battery operating profile name.")
     optimizer_mode: OptimizerMode = Field(
-        "window_v1",
-        description="Optimizer mode to use for the scheduled recommendation inside the backtest.",
+        "milp",
+        description="MILP optimizer mode for the scheduled recommendation inside the backtest.",
     )
     lookback_days: int = Field(
         7,
@@ -32,7 +32,7 @@ class BacktestRequest(BaseModel):
             "example": {
                 "date": "2026-04-29",
                 "profile_name": "balanced",
-                "optimizer_mode": "window_v1",
+                "optimizer_mode": "milp",
                 "lookback_days": 7,
                 "forecast_method": "day_ahead_lightgbm",
                 "market_volatility": "medium",

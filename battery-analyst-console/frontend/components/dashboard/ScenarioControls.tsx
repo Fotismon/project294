@@ -1,8 +1,7 @@
 'use client'
 
 import React from 'react'
-import { OptimizerMode, RiskAppetite, TemperaturePolicy } from '@/types/api'
-import { OptimizerModeSelector } from './OptimizerModeSelector'
+import { RiskAppetite, TemperaturePolicy } from '@/types/api'
 
 interface ScenarioControlsProps {
   roundTripEfficiency: number
@@ -17,8 +16,6 @@ interface ScenarioControlsProps {
   onRiskAppetiteChange: (value: RiskAppetite) => void
   temperaturePolicy: TemperaturePolicy
   onTemperaturePolicyChange: (value: TemperaturePolicy) => void
-  optimizerMode: OptimizerMode
-  onOptimizerModeChange: (value: OptimizerMode) => void
   onRunScenario: () => void
   isRunning?: boolean
 }
@@ -36,8 +33,6 @@ export function ScenarioControls({
   onRiskAppetiteChange,
   temperaturePolicy,
   onTemperaturePolicyChange,
-  optimizerMode,
-  onOptimizerModeChange,
   onRunScenario,
   isRunning = false
 }: ScenarioControlsProps) {
@@ -120,15 +115,18 @@ export function ScenarioControls({
           <option value="strict">Strict</option>
         </SelectControl>
 
-        <OptimizerModeSelector
-          value={optimizerMode}
-          onChange={onOptimizerModeChange}
-        />
+        <div className="rounded-lg border border-border bg-surface px-3 py-2">
+          <p className="text-xs uppercase tracking-wider text-text-secondary">Optimizer</p>
+          <p className="mt-1 text-sm font-medium text-text-primary">MILP</p>
+          <p className="mt-1 text-xs leading-relaxed text-text-muted">
+            Solves all 96 intervals jointly with physical constraints.
+          </p>
+        </div>
       </div>
 
       <div className="mt-4 border-t border-border pt-4">
         <p className="mb-3 text-xs leading-relaxed text-text-muted">
-          Window V1 is transparent and fast. MILP solves all 96 intervals jointly. Auto tries MILP and falls back to Window V1.
+          Scenario recomputation uses the MILP optimizer and compares the resulting dispatch against the active assumptions.
         </p>
         <button
           onClick={onRunScenario}
