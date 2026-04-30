@@ -3,6 +3,7 @@
 import React from 'react'
 import {
   BacktestResponse,
+  BacktestCoverage,
   BatteryAsset,
   BackendBacktestEconomicResult,
   BackendBacktestRealizedWindow,
@@ -27,6 +28,7 @@ interface BacktestPanelProps {
   isRunning: boolean
   result: BacktestResponse | null
   assets?: BatteryAsset[]
+  coverage?: BacktestCoverage | null
 }
 
 function formatEuro(value: number): string {
@@ -140,7 +142,8 @@ export function BacktestPanel({
   onRunBacktest,
   isRunning,
   result,
-  assets = []
+  assets = [],
+  coverage = null
 }: BacktestPanelProps) {
   const missingData = hasMissingHistoricalData(result)
   const economic = result?.economic_result ?? null
@@ -155,9 +158,17 @@ export function BacktestPanel({
             <input
               type="date"
               value={date}
+              min={coverage?.earliest_date ?? undefined}
+              max={coverage?.latest_date ?? undefined}
               onChange={(event) => onDateChange(event.target.value)}
               className="border border-border bg-surface px-3 py-2 text-sm text-text-primary"
             />
+            {coverage?.earliest_date && coverage.latest_date && (
+              <p className="mt-2 max-w-xs text-xs leading-relaxed text-text-muted">
+                Available realized prices: {coverage.earliest_date} to {coverage.latest_date}
+                {' '}({humanize(coverage.source)}).
+              </p>
+            )}
           </div>
           <div>
             <label className="mb-2 block text-xs uppercase tracking-wider text-text-secondary">Battery profile</label>

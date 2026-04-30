@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { OptimizerMode, RiskAppetite, TemperaturePolicy } from '@/types/api'
+import { OptimizerModeSelector } from './OptimizerModeSelector'
 
 interface ScenarioControlsProps {
   roundTripEfficiency: number
@@ -50,12 +51,6 @@ export function ScenarioControls({
     normal: 'Normal policy uses standard temperature thresholds.',
     strict: 'Strict temperature policy avoids warmer operating windows.'
   }
-  const optimizerDescription: Record<OptimizerMode, string> = {
-    window_v1: 'Transparent rolling-window scheduler.',
-    milp: 'Optimization across all 96 intervals.',
-    auto: 'Try MILP and fallback to Window V1.'
-  }
-
   return (
     <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
       <div className="mb-4">
@@ -125,16 +120,10 @@ export function ScenarioControls({
           <option value="strict">Strict</option>
         </SelectControl>
 
-        <SelectControl
-          label="Optimizer mode"
+        <OptimizerModeSelector
           value={optimizerMode}
-          onChange={(value) => onOptimizerModeChange(value as OptimizerMode)}
-          description={optimizerDescription[optimizerMode]}
-        >
-          <option value="window_v1">Window V1</option>
-          <option value="milp">MILP</option>
-          <option value="auto">Auto</option>
-        </SelectControl>
+          onChange={onOptimizerModeChange}
+        />
       </div>
 
       <div className="mt-4 border-t border-border pt-4">

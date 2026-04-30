@@ -13,19 +13,64 @@ def candidate_market_price_paths(csv_path: str | None = None) -> list[Path]:
     return [
         repo_root / "data" / "market_prices.csv",
         current_file.parent / "market_prices.csv",
+        repo_root / "backend" / "models" / "henex_dam_results (1).csv",
     ]
 
 
-def load_market_price_rows(csv_path: str | None = None) -> list[dict]:
-    """Load market price rows from the first available local CSV file."""
+def market_price_source_label(path: Path) -> str:
+    if path.name == "henex_dam_results (1).csv":
+        return "henex_feature_store_mcp"
+    return "market_prices_csv"
+
+
+def normalize_market_price_row(row: dict, source: str) -> dict:
+    if source == "henex_feature_store_mcp":
+        timestamp = row.get("datetime", "")
+        date = timestamp[:10]
+        return {
+            "date": date,
+            "interval_index": row.get("SORT", ""),
+            "price": row.get("mcp", ""),
+            "temperature": row.get("temperature_2m", ""),
+        }
+
+    return row
+
+
+def load_market_price_rows_with_source(
+    csv_path: str | None = None,
+) -> tuple[list[dict], str | None, Path | None]:
+    """Load market price rows from the first available real market data source."""
 
     for path in candidate_market_price_paths(csv_path):
         if not path.exists():
             continue
+        source = market_price_source_label(path)
         with path.open(newline="", encoding="utf-8") as csv_file:
-            return list(csv.DictReader(csv_file))
+            rows = [
+                normalize_market_price_row(row, source)
+                for row in csv.DictReader(csv_file)
+            ]
+        return rows, source, path
 
-    return []
+    return [], None, None
+
+
+def load_market_price_rows(csv_path: str | None = None) -> list[dict]:
+    """Load normalized market price rows from the first available local source."""
+
+    rows, _source, _path = load_market_price_rows_with_source(csv_path)
+    return rows
+
+
+def get_market_price_coverage(csv_path: str | None = None) -> dict:
+    rows, source, _path = load_market_price_rows_with_source(csv_path)
+    dates = sorted({row["date"] for row in rows if row.get("date")})
+    return {
+        "source": source or "unavailable",
+        "earliest_date": dates[0] if dates else None,
+        "latest_date": dates[-1] if dates else None,
+    }
 
 
 def get_prices_for_date(
@@ -36,13 +81,19 @@ def get_prices_for_date(
 
     rows = [row for row in load_market_price_rows(csv_path) if row.get("date") == date]
     if not rows:
-        raise ValueError(f"No market price data found for date {date}.")
+        coverage = get_market_price_coverage(csv_path)
+        if coverage["earliest_date"] and coverage["latest_date"]:
+            raise ValueError(
+                f"No realized market price data found for date {date}. "
+                f"Available range is {coverage['earliest_date']} to {coverage['latest_date']}."
+            )
+        raise ValueError("No realized market price data source is available.")
 
     for column in ("date", "interval_index", "price"):
         if column not in rows[0]:
             raise ValueError(f"Market price CSV is missing required column '{column}'.")
 
-    rows.sort(key=lambda row: int(row["interval_index"]))
+    rows.sort(key=lambda row: int(float(row["interval_index"])))
     if len(rows) != 96:
         raise ValueError(f"Expected 96 market price rows for {date}; found {len(rows)}.")
 

@@ -5,6 +5,7 @@ import {
   BackendAlternativeSchedule,
   BackendBacktestRequest,
   BackendBacktestResponse,
+  BacktestCoverage,
   BackendForecastResponse,
   BackendScheduleRequest,
   BackendScheduleResponse,
@@ -442,6 +443,17 @@ export async function runBacktest(payload: BacktestRequest): Promise<BacktestRes
     )
   } catch (error) {
     recordApiFallback('/backtest', error)
+    throw error
+  }
+}
+
+export async function getBacktestCoverage(): Promise<BacktestCoverage> {
+  requireApiBaseUrl()
+
+  try {
+    return await fetchJson<BacktestCoverage>('/backtest/coverage')
+  } catch (error) {
+    recordApiFallback('/backtest/coverage', error)
     throw error
   }
 }

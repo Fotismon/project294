@@ -18,10 +18,11 @@ import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
 import { ScenarioComparisonPanel } from '@/components/dashboard/ScenarioComparisonPanel'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
 import { ConsoleSectionId } from '@/components/dashboard/SideNav'
-import { clearApiFallback, getFleet, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, runBacktest, runScenario } from '@/lib/api'
+import { clearApiFallback, getBacktestCoverage, getFleet, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, runBacktest, runScenario } from '@/lib/api'
 import {
   Alert,
   ApiStatus,
+  BacktestCoverage,
   BacktestResponse,
   BatteryAction,
   BatteryAsset,
@@ -42,6 +43,7 @@ function currentStatusTime(): string {
 
 function backtestFallbackDetail(message: string): string {
   const lower = message.toLowerCase()
+  if (lower.includes('available range')) return message
   if (lower.includes('historical') || lower.includes('csv') || lower.includes('market_prices') || lower.includes('no data')) {
     return 'Historical market data is unavailable for this date.'
   }
@@ -66,6 +68,11 @@ function tomorrowAthens(): string {
     day: '2-digit',
     timeZone: 'Europe/Athens'
   }).format(tomorrow)
+}
+
+function dateWithinCoverage(date: string, coverage: BacktestCoverage | null): boolean {
+  if (!coverage?.earliest_date || !coverage.latest_date) return true
+  return date >= coverage.earliest_date && date <= coverage.latest_date
 }
 
 function normalizeEfficiency(value: number): number {
@@ -180,6 +187,7 @@ export default function Home() {
   const [backtestDate, setBacktestDate] = useState('2026-04-25')
   const [backtestProfile, setBacktestProfile] = useState<RiskAppetite>('balanced')
   const [backtestResult, setBacktestResult] = useState<BacktestResponse | null>(null)
+  const [backtestCoverage, setBacktestCoverage] = useState<BacktestCoverage | null>(null)
   const [isBacktestRunning, setIsBacktestRunning] = useState(false)
 
   const fleetSummary = useMemo(() => calculateFleetSummary(fleetAssets), [fleetAssets])
@@ -208,15 +216,22 @@ export default function Home() {
       try {
         const operatingDate = tomorrowAthens()
 
-        const [schedule, forecast, fleet] = await Promise.all([
+        const [schedule, forecast, fleet, coverage] = await Promise.all([
           getSchedule(operatingDate, 'balanced', optimizerMode),
           getForecast(operatingDate),
-          getFleet()
+          getFleet(),
+          getBacktestCoverage()
         ])
         if (!mounted) return
         setScheduleData(schedule)
         setForecastData(forecast)
         setFleetAssets(fleet.assets)
+        setBacktestCoverage(coverage)
+        setBacktestDate((currentDate) => (
+          dateWithinCoverage(currentDate, coverage)
+            ? currentDate
+            : coverage.latest_date ?? currentDate
+        ))
         setAlerts(scheduleAlertsOrFallback(schedule))
         const fallback = getLastApiFallback()
         if (!hasConfiguredApiBaseUrl()) {
@@ -365,6 +380,12 @@ export default function Home() {
     })
     clearApiFallback()
     try {
+      if (!dateWithinCoverage(backtestDate, backtestCoverage)) {
+        throw new Error(
+          `No realized market price data found for date ${backtestDate}. ` +
+          `Available range is ${backtestCoverage?.earliest_date} to ${backtestCoverage?.latest_date}.`
+        )
+      }
       const result = await runBacktest({
         date: backtestDate,
         profile_name: backtestProfile,
@@ -448,6 +469,9 @@ export default function Home() {
             onAssetActionChange={handleAssetActionChange}
             onOpenAssetDetail={setSelectedAssetId}
             onCloseAssetDetail={() => setSelectedAssetId(null)}
+            optimizerMode={optimizerMode}
+            onOptimizerModeChange={setOptimizerMode}
+            isOptimizerLoading={isLoading}
           />
         )}
         {activeSection === 'fleet' && !scheduleData && <LiveDataUnavailablePanel />}
@@ -588,6 +612,7 @@ export default function Home() {
               isRunning={isBacktestRunning}
               result={backtestResult}
               assets={fleetAssets}
+              coverage={backtestCoverage}
             />
           </div>
         )}

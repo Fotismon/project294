@@ -43,6 +43,18 @@ class BacktestRequest(BaseModel):
     )
 
 
+class BacktestCoverageResponse(BaseModel):
+    source: str = Field(..., description="Historical realized price data source.")
+    earliest_date: str | None = Field(
+        None,
+        description="Earliest historical date with realized market price data.",
+    )
+    latest_date: str | None = Field(
+        None,
+        description="Latest historical date with realized market price data.",
+    )
+
+
 class BacktestRealizedWindow(BaseModel):
     start: str = Field(..., description="Window start time in HH:MM format.")
     end: str = Field(..., description="Window end time in HH:MM format.")

@@ -8,6 +8,7 @@ import {
   FleetRecommendation,
   FleetSummary,
   ForecastPoint,
+  OptimizerMode,
   ScheduleResponse
 } from '@/types/api'
 import {
@@ -25,6 +26,7 @@ import { FleetManagerSection } from './FleetManagerSection'
 import { MarketForecastSection } from './MarketForecastSection'
 import { OpinionatedRecommendationPanel } from './OpinionatedRecommendationPanel'
 import { OptimizerBadge } from './OptimizerBadge'
+import { OptimizerModeSelector } from './OptimizerModeSelector'
 import { ProfitHealthComparisonCard } from './ProfitHealthComparisonCard'
 import { RecommendationSection } from './RecommendationSection'
 import { ScheduleTradeoffMatrix } from './ScheduleTradeoffMatrix'
@@ -47,6 +49,9 @@ interface FleetOverviewProps {
   onAssetActionChange: (id: string, action: BatteryAction) => void
   onOpenAssetDetail: (assetId: string) => void
   onCloseAssetDetail: () => void
+  optimizerMode: OptimizerMode
+  onOptimizerModeChange: (mode: OptimizerMode) => void
+  isOptimizerLoading?: boolean
 }
 
 function formatEuro(value: number): string {
@@ -106,7 +111,10 @@ export function FleetOverview({
   onApplyAction,
   onAssetActionChange,
   onOpenAssetDetail,
-  onCloseAssetDetail
+  onCloseAssetDetail,
+  optimizerMode,
+  onOptimizerModeChange,
+  isOptimizerLoading = false
 }: FleetOverviewProps) {
   const hasAlerts = alerts.length > 0 || hasGeneratedAssetAlerts(fleetAssets)
   const singleProfileValue = schedule.single_profile_expected_value_range_eur ?? schedule.expected_value_range_eur
@@ -119,7 +127,15 @@ export function FleetOverview({
           <h2 className="text-2xl font-semibold text-text-primary">Fleet Overview</h2>
           <p className="mt-1 text-sm text-text-secondary">Portfolio decision, market signal, asset actions, and operational risk.</p>
         </div>
-        <OptimizerBadge optimizer={schedule.optimizer} />
+        <div className="flex flex-col items-start gap-3 sm:items-end">
+          <OptimizerModeSelector
+            value={optimizerMode}
+            onChange={onOptimizerModeChange}
+            disabled={isOptimizerLoading}
+            compact
+          />
+          <OptimizerBadge optimizer={schedule.optimizer} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 min-[1440px]:grid-cols-7">

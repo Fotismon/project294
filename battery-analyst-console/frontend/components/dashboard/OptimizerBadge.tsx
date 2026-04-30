@@ -17,6 +17,12 @@ function modeLabel(mode: string | undefined): string {
   return mode ? mode.replace(/_/g, ' ') : 'Unknown'
 }
 
+function versionLabel(version: string): string {
+  if (version === 'window_v1.2') return 'v1.2'
+  if (version === 'milp_v1') return 'MILP v1'
+  return version
+}
+
 function optimizerTone(optimizer?: OptimizerMetadata | null): BadgeTone {
   if (!optimizer) return 'neutral'
   if (optimizer.fallback_used) return 'warning'
@@ -38,14 +44,16 @@ export function OptimizerBadge({
   className = ''
 }: OptimizerBadgeProps) {
   const requestedDiffers = optimizer && optimizer.requested_mode !== optimizer.used_mode
-  const solverStatus = optimizer?.solver_status ? `Solver: ${optimizer.solver_status}` : null
+  const solverStatus = optimizer?.used_mode === 'milp' && optimizer.solver_status
+    ? `Solver: ${optimizer.solver_status}`
+    : null
 
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
       <StatusBadge label={primaryLabel(optimizer)} tone={optimizerTone(optimizer)} dot size={compact ? 'sm' : 'md'} />
       {optimizer?.fallback_used && <StatusBadge label="Fallback used" tone="warning" size={compact ? 'sm' : 'md'} />}
       {solverStatus && <StatusBadge label={solverStatus} tone={optimizer?.is_optimal ? 'positive' : 'neutral'} size={compact ? 'sm' : 'md'} />}
-      {!compact && optimizer?.model_version && <StatusBadge label={optimizer.model_version} tone="neutral" />}
+      {!compact && optimizer?.model_version && <StatusBadge label={versionLabel(optimizer.model_version)} tone="neutral" />}
       {!compact && requestedDiffers && <StatusBadge label={`Requested: ${modeLabel(optimizer.requested_mode)}`} tone="neutral" />}
       {!compact && optimizer?.fallback_reason && (
         <p className="basis-full text-xs leading-relaxed text-text-muted">{optimizer.fallback_reason}</p>

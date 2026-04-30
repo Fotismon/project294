@@ -300,6 +300,12 @@ export interface BacktestResponse {
   forecast_points?: ForecastPoint[]
 }
 
+export interface BacktestCoverage {
+  source: string
+  earliest_date: string | null
+  latest_date: string | null
+}
+
 export type BacktestResult = BacktestResponse
 
 // ---------------------------------------------------------------------------
