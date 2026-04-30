@@ -59,6 +59,18 @@ def fetch_weather_forecast(target_date: str) -> pd.DataFrame:
     target_dt = pd.Timestamp(target_date)
     day_df = df[df["datetime"].dt.date == target_dt.date()].copy()
 
+    if day_df.empty:
+        # target_date is outside the 8-day forecast window; return zeros
+        slots = pd.date_range(target_dt, periods=96, freq="15min")
+        return pd.DataFrame({
+            "datetime": slots,
+            "temperature_2m": 20.0,
+            "apparent_temperature": 20.0,
+            "direct_radiation": 0.0,
+            "wind_speed_10m": 3.0,
+            "cloud_cover": 50.0,
+        })
+
     # Upsample hourly → 15-min by forward-fill.
     day_df = day_df.set_index("datetime")
     end = day_df.index.max() + pd.Timedelta(minutes=45)
@@ -81,12 +93,16 @@ def build_inference_features(
     store: pd.DataFrame,
     weather: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Build the 96-row × 48-feature inference DataFrame for target_date."""
+    """Build the 96-row inference DataFrame matching the 46 features in feature_list.json.
+
+    Mirrors engineer_features() from the training notebook, adapted for single-day
+    inference where only historical store data is available (no same-day realized values).
+    """
     target_dt = pd.Timestamp(target_date)
     slots = pd.date_range(target_dt, periods=96, freq="15min")
     df = pd.DataFrame({"datetime": slots})
 
-    # ── Time features ────────────────────────────────────────────────────────
+    # ── Time features ─────────────────────────────────────────────────────────
     df["hour"] = df["datetime"].dt.hour
     df["quarter"] = df["datetime"].dt.minute // 15
     df["slot"] = df["hour"] * 4 + df["quarter"]
@@ -99,74 +115,143 @@ def build_inference_features(
     df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
     df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
 
-    # ── Price lag features ───────────────────────────────────────────────────
-    for days, col in [(1, "mcp_lag_1d"), (2, "mcp_lag_2d"), (7, "mcp_lag_7d")]:
-        lag_rows = _get_store_rows(store, target_dt, days)
-        df[col] = lag_rows["mcp"].values if len(lag_rows) == 96 else np.nan
+    # ── MCP lag features ──────────────────────────────────────────────────────
+    lag1_rows = _get_store_rows(store, target_dt, 1)
+    lag2_rows = _get_store_rows(store, target_dt, 2)
+    lag7_rows = _get_store_rows(store, target_dt, 7)
 
-    # Rolling 7-day mean/std (over the 7 days prior to target, excluding target).
+    df["mcp_lag_1d"] = lag1_rows["mcp"].values if len(lag1_rows) == 96 else np.nan
+    df["mcp_lag_2d"] = lag2_rows["mcp"].values if len(lag2_rows) == 96 else np.nan
+    df["mcp_lag_7d"] = lag7_rows["mcp"].values if len(lag7_rows) == 96 else np.nan
+
     past_start = target_dt - pd.Timedelta(days=7)
     past_mask = (store["datetime"] >= past_start) & (store["datetime"] < target_dt)
     past_mcp = store.loc[past_mask, "mcp"]
     df["mcp_roll7d_mean"] = past_mcp.mean() if len(past_mcp) > 0 else np.nan
     df["mcp_roll7d_std"] = past_mcp.std() if len(past_mcp) > 1 else np.nan
 
-    # Derived from price lags.
+    # hourly_trend: rolling 4-slot mean of mcp_lag_1d (matches notebook)
+    df["hourly_trend"] = df["mcp_lag_1d"].rolling(4, min_periods=1).mean()
+
+    # ramp_1h: was price rising or falling at this slot yesterday?
+    df["ramp_1h"] = df["mcp_lag_1d"] - df["mcp_lag_1d"].shift(4)
+
     df["mcp_lag_1d_negative"] = (df["mcp_lag_1d"] < 10).astype(float)
     df["mcp_lag_7d_negative"] = (df["mcp_lag_7d"] < 10).astype(float)
 
-    # Previous-day price spread (= daily_spread column in training data).
-    lag1_rows = _get_store_rows(store, target_dt, 1)
+    # ── D+1 proxy features: yesterday's realized values as best available proxy ─
     if len(lag1_rows) == 96:
-        df["daily_spread"] = lag1_rows["mcp"].max() - lag1_rows["mcp"].min()
+        df["net_load_forecast_proxy"] = (
+            lag1_rows["net_load_minus_res"].values
+            if "net_load_minus_res" in lag1_rows.columns
+            else 0.0
+        )
+        df["res_forecast_proxy"] = (
+            lag1_rows["res_mwh"].values
+            if "res_mwh" in lag1_rows.columns
+            else 0.0
+        )
+        df["demand_forecast_proxy"] = (
+            lag1_rows["demand_volume"].values
+            if "demand_volume" in lag1_rows.columns
+            else 0.0
+        )
     else:
-        df["daily_spread"] = np.nan
+        df["net_load_forecast_proxy"] = 0.0
+        df["res_forecast_proxy"] = 0.0
+        df["demand_forecast_proxy"] = 0.0
 
-    # ── D+1 proxy: yesterday's supply-mix and IPTO features ─────────────────
-    # These features come from HENEX/IPTO DAM results not yet available for D+1,
-    # so we forward-fill yesterday's values as the best available proxy.
-    yest_rows = _get_store_rows(store, target_dt, 1)
-    proxy_cols = [
-        "vol_res", "vol_gas", "vol_lignite", "vol_hydro", "vol_supply",
-        "vol_storage", "vol_load", "net_imports_mwh", "res_share", "net_load",
-        "price_range_sell", "supply_slope_at_mcp", "demand_volume",
-        "net_load_mwh", "res_mwh", "net_load_minus_res", "res_penetration",
-    ]
-    for col in proxy_cols:
-        if col in yest_rows.columns and len(yest_rows) == 96:
-            df[col] = yest_rows[col].values
-        else:
-            df[col] = 0.0
+    if len(lag7_rows) == 96 and "net_load_minus_res" in lag7_rows.columns:
+        df["net_load_lag_7d"] = lag7_rows["net_load_minus_res"].values
+    else:
+        df["net_load_lag_7d"] = 0.0
 
-    # ── IPTO lag features ────────────────────────────────────────────────────
-    for days, col in [(1, "net_load_lag_1d"), (7, "net_load_lag_7d")]:
-        lag_rows = _get_store_rows(store, target_dt, days)
-        if "net_load_minus_res" in lag_rows.columns and len(lag_rows) == 96:
-            df[col] = lag_rows["net_load_minus_res"].values
-        else:
-            df[col] = 0.0
+    df["net_load_proxy_sq"] = df["net_load_forecast_proxy"] ** 2
+    df["net_load_proxy_cu"] = df["net_load_forecast_proxy"] ** 3
+    df["res_surplus"] = (df["net_load_forecast_proxy"] < 0).astype(float)
+    df["res_surplus_depth"] = df["net_load_forecast_proxy"].clip(upper=0).abs()
 
-    # ── Derived demand features ──────────────────────────────────────────────
-    df["net_load_sq"] = df["net_load_minus_res"] ** 2
-    df["net_load_cu"] = df["net_load_minus_res"] ** 3
-    df["res_surplus"] = (df["net_load_minus_res"] < 0).astype(float)
-    df["res_surplus_depth"] = df["net_load_minus_res"].clip(upper=0).abs()
-
-    # ── Weather features from Open-Meteo ─────────────────────────────────────
-    weather_cols = [
-        "temperature_2m", "apparent_temperature", "direct_radiation",
-        "wind_speed_10m", "cloud_cover",
-    ]
-    for col in weather_cols:
+    # ── Weather features ──────────────────────────────────────────────────────
+    for col in ["temperature_2m", "apparent_temperature", "direct_radiation",
+                "wind_speed_10m", "cloud_cover"]:
         if col in weather.columns and len(weather) >= 96:
             df[col] = weather[col].values[:96]
         else:
             df[col] = 0.0
 
-    # Radiation lag from yesterday's feature store.
-    if "direct_radiation" in yest_rows.columns and len(yest_rows) == 96:
-        df["radiation_lag_1d"] = yest_rows["direct_radiation"].values
+    df["solar_proxy"] = df["direct_radiation"] * (1 - df["cloud_cover"] / 100)
+    df["wind_proxy"] = df["wind_speed_10m"] ** 3
+    df["temp_stress"] = (df["temperature_2m"] - 20).abs()
+
+    if len(lag1_rows) == 96 and "direct_radiation" in lag1_rows.columns:
+        df["radiation_lag_1d"] = lag1_rows["direct_radiation"].values
     else:
         df["radiation_lag_1d"] = 0.0
+
+    # ── AggrCurves market structure (lagged) ──────────────────────────────────
+    if len(lag1_rows) == 96:
+        df["slope_lag_1d"] = (
+            lag1_rows["supply_slope_at_mcp"].values
+            if "supply_slope_at_mcp" in lag1_rows.columns
+            else 0.0
+        )
+        df["price_range_lag_1d"] = (
+            lag1_rows["price_range_sell"].values
+            if "price_range_sell" in lag1_rows.columns
+            else 0.0
+        )
+        if "vol_supply" in lag1_rows.columns:
+            vol_supply_lag = lag1_rows["vol_supply"].values.astype(float)
+            df["market_tightness"] = df["demand_forecast_proxy"] / np.where(
+                vol_supply_lag == 0, np.nan, vol_supply_lag
+            )
+        else:
+            df["market_tightness"] = np.nan
+    else:
+        df["slope_lag_1d"] = 0.0
+        df["price_range_lag_1d"] = 0.0
+        df["market_tightness"] = np.nan
+
+    # steep_supply: slope > median slope in the 7d window (or full store fallback)
+    if "supply_slope_at_mcp" in store.columns:
+        slope_series = store.loc[past_mask, "supply_slope_at_mcp"].dropna()
+        slope_median = slope_series.median() if len(slope_series) > 0 else store["supply_slope_at_mcp"].median()
+        df["steep_supply"] = (df["slope_lag_1d"] > slope_median).astype(int)
+    else:
+        df["steep_supply"] = 0
+
+    # curve_volatility = price_range_lag_1d / |mcp_lag_1d|
+    df["curve_volatility"] = df["price_range_lag_1d"] / df["mcp_lag_1d"].abs().replace(0, np.nan)
+
+    # intraday_spread_signal: how far above yesterday's running minimum (rolling 96)
+    df["intraday_spread_signal"] = (
+        df["mcp_lag_1d"] - df["mcp_lag_1d"].rolling(96, min_periods=1).min()
+    )
+
+    # price_regime: which third of the price distribution is mcp_lag_1d in?
+    # Use global store quantiles to match training distribution.
+    store_mcp_q33 = store["mcp"].quantile(0.333)
+    store_mcp_q67 = store["mcp"].quantile(0.667)
+    df["price_regime"] = df["mcp_lag_1d"].apply(
+        lambda x: 0 if pd.isna(x) or x <= store_mcp_q33
+        else (1 if x <= store_mcp_q67 else 2)
+    ).astype(int)
+
+    # volatility_regime: is the 7d rolling std above the historical median?
+    store_7d_stds = (
+        store["mcp"]
+        .rolling(window=672, min_periods=96)
+        .std()
+        .dropna()
+    )
+    std_threshold = store_7d_stds.median() if len(store_7d_stds) > 0 else 20.0
+    current_std = df["mcp_roll7d_std"].iloc[0]
+    df["volatility_regime"] = int(not pd.isna(current_std) and current_std > std_threshold)
+
+    # prev_day_spread: yesterday's (max - min) MCP
+    if len(lag1_rows) == 96:
+        df["prev_day_spread"] = lag1_rows["mcp"].max() - lag1_rows["mcp"].min()
+    else:
+        df["prev_day_spread"] = np.nan
 
     return df.drop(columns=["datetime"])
