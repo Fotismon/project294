@@ -1,6 +1,42 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ShapFeatureContribution(BaseModel):
+    feature: str = Field(..., description="Feature name contributing to this forecast slot.")
+    contribution_eur_per_mwh: float = Field(
+        ...,
+        description="SHAP contribution in EUR/MWh for the forecast slot.",
+    )
+    direction: str = Field(
+        ...,
+        description="Whether this feature pushes the forecast up or down.",
+    )
+
+
+class ShapSlotExplanation(BaseModel):
+    source: str = Field(..., description="Source of the SHAP explanation.")
+    explanation_date: str = Field(
+        ...,
+        description="Historical SHAP date used for this explanation.",
+    )
+    confidence_score: float | None = Field(
+        None,
+        description="SHAP file confidence score for the explanation row.",
+    )
+    actual_price_eur_per_mwh: float | None = Field(
+        None,
+        description="Historical actual price from the SHAP row, if available.",
+    )
+    model_price_eur_per_mwh: float | None = Field(
+        None,
+        description="Historical model P50 price from the SHAP row, if available.",
+    )
+    top_contributions: list[ShapFeatureContribution] = Field(
+        default_factory=list,
+        description="Top feature contributions for the slot.",
+    )
+
+
 class ForecastPoint(BaseModel):
     timestamp: str = Field(..., description="Forecast timestamp in ISO 8601 format.")
     predicted_price: float = Field(..., description="Predicted market price.")
@@ -20,6 +56,10 @@ class ForecastPoint(BaseModel):
     risk_adjusted_price: float = Field(
         ...,
         description="Confidence-weighted price between the P50 and lower confidence bound.",
+    )
+    shap_explanation: ShapSlotExplanation | None = Field(
+        None,
+        description="Top SHAP feature contributions explaining this forecast slot.",
     )
 
 
@@ -71,6 +111,20 @@ class ForecastResponse(BaseModel):
                         "confidence_score": 0.82,
                         "arbitrage_signal": 12.4,
                         "risk_adjusted_price": 37.1,
+                        "shap_explanation": {
+                            "source": "historical_shap_per_slot",
+                            "explanation_date": "2026-04-29",
+                            "confidence_score": 0.82,
+                            "actual_price_eur_per_mwh": 39.1,
+                            "model_price_eur_per_mwh": 38.4,
+                            "top_contributions": [
+                                {
+                                    "feature": "mcp_lag_1d",
+                                    "contribution_eur_per_mwh": -7.2,
+                                    "direction": "down",
+                                }
+                            ],
+                        },
                     }
                 ],
             }
