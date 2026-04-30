@@ -43,12 +43,6 @@ pnpm-debug.log*
 # Local data artifacts
 battery-analyst-console/data/*
 !battery-analyst-console/data/README.md
-*.tsv
-*.xlsx
-*.xls
-*.parquet
-*.feather
-*.pickle
 
 # OS and editor files
 .DS_Store
