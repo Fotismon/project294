@@ -7,6 +7,7 @@ from app.forecasting.forecast_data import (
 )
 from app.forecasting.forecast_engine import run_forecast
 from app.schemas.backtest import (
+    BacktestCurvePoint,
     BacktestEconomicResult,
     BacktestRealizedWindow,
     BacktestRequest,
@@ -20,7 +21,7 @@ from app.scheduling.soc import time_to_interval_index
 def generate_backtest_forecast(
     date: str,
     **_kwargs,
-) -> tuple[list[float], float, list[str]]:
+) -> tuple[list[float], float, list[str], list]:
     """Generate a D+1 forecast using the trained LightGBM quantile models."""
     store = load_feature_store()
     try:
@@ -37,8 +38,29 @@ def generate_backtest_forecast(
     return (
         prices,
         avg_band_width,
-        [f"Generated LightGBM quantile forecast (avg P05-P95 band: {avg_band_width:.1f} EUR/MWh)."],
+        [
+            "Generated day-ahead LightGBM quantile forecast for historical replay.",
+            f"Average P05-P95 band: {avg_band_width:.1f} EUR/MWh.",
+            "Realized comparison uses historical HENEX MCP, not direct day-ahead API prices.",
+        ],
+        forecast_response.points,
     )
+
+
+def build_backtest_curve(
+    forecast_points: list,
+    realized_prices: list[float],
+) -> list[BacktestCurvePoint]:
+    return [
+        BacktestCurvePoint(
+            timestamp=point.timestamp,
+            forecast_price=point.predicted_price,
+            realized_price=round(realized_prices[index], 2),
+            lower_bound=point.lower_bound,
+            upper_bound=point.upper_bound,
+        )
+        for index, point in enumerate(forecast_points[: len(realized_prices)])
+    ]
 
 
 def average_prices_for_window(prices: list[float], start: str, end: str) -> float:
@@ -59,9 +81,11 @@ def run_lightweight_backtest(request: BacktestRequest) -> BacktestResponse:
     """Run a historical backtest for a single date using the LightGBM forecast model."""
 
     actual_prices, actual_temperatures = get_prices_for_date(request.date)
-    forecast_prices, avg_band_width, forecast_explanation = generate_backtest_forecast(
+    forecast_prices, avg_band_width, forecast_explanation, forecast_points = generate_backtest_forecast(
         date=request.date,
     )
+    forecast_method = "day_ahead_lightgbm"
+    curve = build_backtest_curve(forecast_points, actual_prices)
     warnings: list[str] = []
 
     schedule_request = ScheduleRequest(
@@ -81,13 +105,14 @@ def run_lightweight_backtest(request: BacktestRequest) -> BacktestResponse:
         return BacktestResponse(
             date=request.date,
             profile_name=request.profile_name,
-            forecast_method=request.forecast_method,
+            forecast_method=forecast_method,
             decision="hold",
             confidence=schedule_response.confidence,
             charge_window=None,
             discharge_window=None,
             economic_result=None,
             schedule_response=schedule_response,
+            curve=curve,
             explanation=forecast_explanation
             + ["Scheduler returned hold, so no realized trade value was calculated."],
             warnings=warnings,
@@ -127,7 +152,7 @@ def run_lightweight_backtest(request: BacktestRequest) -> BacktestResponse:
     return BacktestResponse(
         date=request.date,
         profile_name=request.profile_name,
-        forecast_method=request.forecast_method,
+        forecast_method=forecast_method,
         decision=schedule_response.decision,
         confidence=schedule_response.confidence,
         charge_window=BacktestRealizedWindow(
@@ -150,6 +175,7 @@ def run_lightweight_backtest(request: BacktestRequest) -> BacktestResponse:
             value_error_eur=round(value_error_eur, 2),
         ),
         schedule_response=schedule_response,
+        curve=curve,
         explanation=forecast_explanation
         + [
             "Compared recommended forecast windows against actual realized prices.",

@@ -2,8 +2,19 @@
 
 import React from 'react'
 import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ReferenceArea,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from 'recharts'
+import {
   BacktestResponse,
   BacktestCoverage,
+  BacktestCurvePoint,
   BatteryAsset,
   BackendBacktestEconomicResult,
   BackendBacktestRealizedWindow,
@@ -63,6 +74,7 @@ function formatSignedPrice(value: number): string {
 }
 
 function humanize(value: string): string {
+  if (value === 'day_ahead_lightgbm') return 'Day-Ahead LightGBM'
   return value
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
@@ -264,6 +276,12 @@ export function BacktestPanel({
               <WindowComparison label="Discharge price comparison" window={result.discharge_window} type="discharge" />
             </div>
 
+            <BacktestCurveChart
+              curve={result.curve}
+              chargeWindow={result.charge_window ?? undefined}
+              dischargeWindow={result.discharge_window ?? undefined}
+            />
+
             <EconomicResult result={economic} isHold={isHold} />
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -282,6 +300,116 @@ export function BacktestPanel({
           </div>
         )}
       </SectionPanel>
+    </div>
+  )
+}
+
+function formatTime(timestamp: string): string {
+  return new Date(timestamp).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/Athens'
+  })
+}
+
+function timestampForWindow(curve: BacktestCurvePoint[], time: string): string {
+  const date = curve[0]?.timestamp.slice(0, 10) ?? '2026-04-29'
+  return `${date}T${time}:00+03:00`
+}
+
+function BacktestCurveChart({
+  curve,
+  chargeWindow,
+  dischargeWindow
+}: {
+  curve: BacktestCurvePoint[]
+  chargeWindow?: { start: string; end: string } | null
+  dischargeWindow?: { start: string; end: string } | null
+}) {
+  if (curve.length === 0) {
+    return (
+      <div className="border border-border bg-surface p-4">
+        <p className="text-xs uppercase tracking-wider text-text-secondary">Day-ahead curve</p>
+        <p className="mt-3 text-sm text-text-secondary">No forecast curve was returned for this backtest.</p>
+      </div>
+    )
+  }
+
+  const chartData = curve.filter((point) => {
+    const hour = new Date(point.timestamp).getHours()
+    return hour >= 5 && hour <= 23
+  })
+  const chargeStart = chargeWindow ? timestampForWindow(curve, chargeWindow.start) : null
+  const chargeEnd = chargeWindow ? timestampForWindow(curve, chargeWindow.end) : null
+  const dischargeStart = dischargeWindow ? timestampForWindow(curve, dischargeWindow.start) : null
+  const dischargeEnd = dischargeWindow ? timestampForWindow(curve, dischargeWindow.end) : null
+
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: BacktestCurvePoint }> }) => {
+    if (!active || !payload?.length) return null
+    const point = payload[0].payload
+
+    return (
+      <div className="rounded-lg border border-border bg-surface-elevated p-3 shadow-lg">
+        <p className="mb-1 text-xs text-text-secondary">{formatTime(point.timestamp)}</p>
+        <p className="text-sm text-text-primary">Forecast: <span className="font-semibold">{point.forecast_price.toFixed(1)} EUR/MWh</span></p>
+        <p className="text-sm text-text-primary">Realized MCP: <span className="font-semibold">{point.realized_price.toFixed(1)} EUR/MWh</span></p>
+        {point.lower_bound != null && point.upper_bound != null && (
+          <p className="text-xs text-text-muted">Forecast band: {point.lower_bound.toFixed(1)}-{point.upper_bound.toFixed(1)} EUR/MWh</p>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="border border-border bg-surface p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-wider text-text-secondary">Day-ahead curve</p>
+          <p className="mt-1 text-sm text-text-muted">LightGBM forecast replay compared with realized HENEX MCP.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <StatusBadge label="Forecast" tone="info" dot />
+          <StatusBadge label="Realized MCP" tone="neutral" dot />
+        </div>
+      </div>
+      <div className="mt-4 h-[320px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 16, right: 24, left: 16, bottom: 16 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" vertical={false} />
+            <XAxis
+              dataKey="timestamp"
+              tickFormatter={formatTime}
+              stroke="#686878"
+              tick={{ fill: '#9898a8', fontSize: 11 }}
+              axisLine={{ stroke: '#2a2a3a' }}
+              tickLine={false}
+              minTickGap={24}
+            />
+            <YAxis
+              stroke="#686878"
+              tick={{ fill: '#9898a8', fontSize: 11 }}
+              axisLine={{ stroke: '#2a2a3a' }}
+              tickLine={false}
+              label={{
+                value: 'EUR/MWh',
+                angle: -90,
+                position: 'insideLeft',
+                style: { fill: '#686878', fontSize: 12 }
+              }}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            {chargeStart && chargeEnd && (
+              <ReferenceArea x1={chargeStart} x2={chargeEnd} strokeOpacity={0} fill="#22c55e" fillOpacity={0.12} />
+            )}
+            {dischargeStart && dischargeEnd && (
+              <ReferenceArea x1={dischargeStart} x2={dischargeEnd} strokeOpacity={0} fill="#ef4444" fillOpacity={0.12} />
+            )}
+            <Line type="monotone" dataKey="forecast_price" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+            <Line type="monotone" dataKey="realized_price" stroke="#e8e8ed" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }

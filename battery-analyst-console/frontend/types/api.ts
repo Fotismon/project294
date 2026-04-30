@@ -272,7 +272,7 @@ export interface BacktestRequest {
   profile_name: RiskAppetite | string
   optimizer_mode?: OptimizerMode
   lookback_days?: number
-  forecast_method?: 'lookback_average' | string
+  forecast_method?: 'day_ahead_lightgbm' | string
   market_volatility?: MarketVolatility | string
   data_quality_level?: DataQualityLevel | string
   minimum_margin_eur_per_mwh?: number
@@ -291,6 +291,7 @@ export interface BacktestResponse {
   discharge_window: BackendBacktestRealizedWindow | null
   economic_result: BackendBacktestEconomicResult | null
   schedule_response: ScheduleResponse | null
+  curve: BacktestCurvePoint[]
   explanation: string[]
   warnings: string[]
   expected_value_eur?: number
@@ -298,6 +299,14 @@ export interface BacktestResponse {
   actual_spread?: number
   recommendation_quality?: 'excellent' | 'good' | 'fair' | 'poor'
   forecast_points?: ForecastPoint[]
+}
+
+export interface BacktestCurvePoint {
+  timestamp: string
+  forecast_price: number
+  realized_price: number
+  lower_bound: number | null
+  upper_bound: number | null
 }
 
 export interface BacktestCoverage {
@@ -355,7 +364,7 @@ export interface BackendBacktestRequest {
   profile_name?: RiskAppetite | string
   optimizer_mode?: OptimizerMode
   lookback_days?: number
-  forecast_method?: 'lookback_average' | string
+  forecast_method?: 'day_ahead_lightgbm' | string
   market_volatility?: MarketVolatility | string
   data_quality_level?: DataQualityLevel | string
   minimum_margin_eur_per_mwh?: number
@@ -461,6 +470,7 @@ export interface BackendBacktestResponse {
   discharge_window: BackendBacktestRealizedWindow | null
   economic_result: BackendBacktestEconomicResult | null
   schedule_response: BackendScheduleResponse | null
+  curve?: BacktestCurvePoint[]
   explanation: string[]
   warnings: string[]
 }
