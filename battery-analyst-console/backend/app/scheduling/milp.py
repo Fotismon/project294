@@ -37,6 +37,8 @@ def solve_milp_dispatch(
     interval_minutes: int = DEFAULT_INTERVAL_MINUTES,
     terminal_soc_tolerance: float = 0.01,
     solver_time_limit_seconds: int | None = 10,
+    charge_prices: list[float] | None = None,
+    discharge_prices: list[float] | None = None,
 ) -> MilpDispatchResult:
     input_error = validate_milp_inputs(
         prices=prices,
@@ -44,6 +46,8 @@ def solve_milp_dispatch(
         temperatures=temperatures,
         interval_minutes=interval_minutes,
         terminal_soc_tolerance=terminal_soc_tolerance,
+        charge_prices=charge_prices,
+        discharge_prices=discharge_prices,
     )
     if input_error is not None:
         return failed_result(
@@ -75,6 +79,8 @@ def solve_milp_dispatch(
     ramp_limit = profile.ramp_rate_mw_per_interval or p_max
     terminal_tolerance_mwh = terminal_soc_tolerance * e_nom
     intervals = range(DEFAULT_INTERVALS_PER_DAY)
+    charge_price_signal = charge_prices if charge_prices is not None else prices
+    discharge_price_signal = discharge_prices if discharge_prices is not None else prices
 
     problem = pulp.LpProblem("bess_dispatch_milp", pulp.LpMaximize)
     p_ch = pulp.LpVariable.dicts("p_ch", intervals, lowBound=0, cat="Continuous")
@@ -122,8 +128,8 @@ def solve_milp_dispatch(
 
     objective = pulp.lpSum(
         (
-            prices[index] * (p_dis[index] - auxiliary_load_mw * u_dis[index])
-            - prices[index] * p_ch[index]
+            discharge_price_signal[index] * (p_dis[index] - auxiliary_load_mw * u_dis[index])
+            - charge_price_signal[index] * p_ch[index]
             - degradation_cost * p_dis[index]
         )
         * delta_hours
@@ -203,6 +209,8 @@ def validate_milp_inputs(
     temperatures: list[float] | None,
     interval_minutes: int,
     terminal_soc_tolerance: float,
+    charge_prices: list[float] | None = None,
+    discharge_prices: list[float] | None = None,
 ) -> str | None:
     if len(prices) != DEFAULT_INTERVALS_PER_DAY:
         return (
@@ -211,6 +219,10 @@ def validate_milp_inputs(
         )
     if temperatures is not None and len(temperatures) != len(prices):
         return "temperatures must contain the same number of values as prices."
+    if charge_prices is not None and len(charge_prices) != len(prices):
+        return "charge_prices must contain the same number of values as prices."
+    if discharge_prices is not None and len(discharge_prices) != len(prices):
+        return "discharge_prices must contain the same number of values as prices."
     if interval_minutes <= 0:
         return "interval_minutes must be positive."
     if terminal_soc_tolerance < 0:
