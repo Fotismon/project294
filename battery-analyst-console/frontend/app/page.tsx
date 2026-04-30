@@ -520,7 +520,7 @@ export default function Home() {
             fleetSummary={fleetSummary}
           />
         )}
-        {activeSection === 'fleet' && !scheduleData && <LiveDataUnavailablePanel />}
+        {activeSection === 'fleet' && !isLoading && !scheduleData && <LiveDataUnavailablePanel />}
 
         {activeSection === 'assets' && scheduleData && (
           <div className="space-y-6">
@@ -544,7 +544,7 @@ export default function Home() {
             </div>
           </div>
         )}
-        {activeSection === 'assets' && !scheduleData && <LiveDataUnavailablePanel />}
+        {activeSection === 'assets' && !isLoading && !scheduleData && <LiveDataUnavailablePanel />}
 
         {activeSection === 'scenario' && scheduleData && (
           <div className="space-y-6">
@@ -641,7 +641,7 @@ export default function Home() {
             )}
           </div>
         )}
-        {activeSection === 'scenario' && !scheduleData && <LiveDataUnavailablePanel />}
+        {activeSection === 'scenario' && !isLoading && !scheduleData && <LiveDataUnavailablePanel />}
 
         {activeSection === 'alerts' && (
           <div className="space-y-6">
