@@ -340,7 +340,7 @@ function backtestRequest(payload: BacktestRequest): BackendBacktestRequest {
     profile_name: payload.profile_name ?? payload.battery_profile ?? 'balanced',
     optimizer_mode: payload.optimizer_mode ?? 'window_v1',
     lookback_days: payload.lookback_days ?? 7,
-    forecast_method: payload.forecast_method ?? 'lookback_average',
+    forecast_method: payload.forecast_method ?? 'day_ahead_lightgbm',
     market_volatility: payload.market_volatility ?? 'medium',
     data_quality_level: payload.data_quality_level ?? 'medium',
     minimum_margin_eur_per_mwh: payload.minimum_margin_eur_per_mwh ?? 2
@@ -378,6 +378,7 @@ function mapBacktest(response: BackendBacktestResponse): BacktestResponse {
     discharge_window: response.discharge_window,
     economic_result: response.economic_result,
     schedule_response: response.schedule_response ? mapSchedule(response.schedule_response) : null,
+    curve: response.curve ?? [],
     explanation: response.explanation ?? [],
     warnings: response.warnings ?? [],
     expected_value_eur: expectedMidpoint,

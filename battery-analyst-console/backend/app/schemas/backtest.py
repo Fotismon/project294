@@ -16,8 +16,8 @@ class BacktestRequest(BaseModel):
         description="Number of prior available days to use for forecast generation.",
     )
     forecast_method: str = Field(
-        "lookback_average",
-        description="Forecast method used for the backtest.",
+        "day_ahead_lightgbm",
+        description="Forecast method used for the historical replay.",
     )
     market_volatility: str = Field("medium", description="Market volatility label.")
     data_quality_level: str = Field("medium", description="Input data quality label.")
@@ -34,7 +34,7 @@ class BacktestRequest(BaseModel):
                 "profile_name": "balanced",
                 "optimizer_mode": "window_v1",
                 "lookback_days": 7,
-                "forecast_method": "lookback_average",
+                "forecast_method": "day_ahead_lightgbm",
                 "market_volatility": "medium",
                 "data_quality_level": "medium",
                 "minimum_margin_eur_per_mwh": 2.0,
@@ -82,6 +82,14 @@ class BacktestEconomicResult(BaseModel):
     )
 
 
+class BacktestCurvePoint(BaseModel):
+    timestamp: str = Field(..., description="Interval timestamp in ISO 8601 format.")
+    forecast_price: float = Field(..., description="Day-ahead forecast price in EUR/MWh.")
+    realized_price: float = Field(..., description="Realized HENEX MCP price in EUR/MWh.")
+    lower_bound: float | None = Field(None, description="Lower forecast bound in EUR/MWh.")
+    upper_bound: float | None = Field(None, description="Upper forecast bound in EUR/MWh.")
+
+
 class BacktestResponse(BaseModel):
     date: str = Field(..., description="Historical backtest date in YYYY-MM-DD format.")
     profile_name: str = Field(..., description="Battery operating profile name.")
@@ -103,6 +111,10 @@ class BacktestResponse(BaseModel):
     schedule_response: ScheduleResponse | None = Field(
         None,
         description="Underlying schedule response generated from the forecast.",
+    )
+    curve: list[BacktestCurvePoint] = Field(
+        default_factory=list,
+        description="96-point day-ahead forecast curve compared with realized HENEX MCP.",
     )
     explanation: list[str] = Field(
         default_factory=list,

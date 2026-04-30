@@ -427,7 +427,7 @@ export default function Home() {
         date: backtestDate,
         profile_name: backtestProfile,
         lookback_days: 7,
-        forecast_method: 'lookback_average',
+        forecast_method: 'day_ahead_lightgbm',
         optimizer_mode: optimizerMode,
         market_volatility: 'medium',
         data_quality_level: 'medium',
