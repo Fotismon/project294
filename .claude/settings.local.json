@@ -20,7 +20,9 @@
       "Bash(curl -s http://localhost:8001/health)",
       "Bash(curl -s \"http://localhost:8001/forecast?date=2026-04-30\")",
       "Bash(curl -s 'http://localhost:8001/forecast?date=2026-04-30')",
-      "Bash(curl -s -X POST http://localhost:8001/schedule -H \"Content-Type: application/json\" -d \"{\\\\\"date\\\\\":\\\\\"2026-04-30\\\\\",\\\\\"profile_name\\\\\":\\\\\"balanced\\\\\",\\\\\"prices\\\\\":$\\(curl -s 'http://localhost:8001/forecast?date=2026-04-30')"
+      "Bash(curl -s -X POST http://localhost:8001/schedule -H \"Content-Type: application/json\" -d \"{\\\\\"date\\\\\":\\\\\"2026-04-30\\\\\",\\\\\"profile_name\\\\\":\\\\\"balanced\\\\\",\\\\\"prices\\\\\":$\\(curl -s 'http://localhost:8001/forecast?date=2026-04-30')",
+      "Bash(python -m py_compile app/scheduling/schedule_runner.py app/scheduling/value_diagnostics.py app/scheduling/milp_response.py app/api/schedule.py app/scheduling/optimizer_metadata.py)",
+      "Bash(python -c \"from app.scheduling.schedule_runner import run_schedule_analysis, _resolve_prices, _blend_risk_prices; print\\('Imports OK'\\)\")"
     ]
   }
 }

@@ -312,6 +312,7 @@ def convert_milp_result_to_schedule_response(
     profile: BatteryOperatingProfile,
     date: str,
     requested_mode: str = "milp",
+    reference_prices: list[float] | None = None,
 ) -> ScheduleResponse:
     diagnostics = result.diagnostics or build_empty_dispatch_diagnostics(profile)
     if not result.feasible:
@@ -356,6 +357,7 @@ def convert_milp_result_to_schedule_response(
             charge_window=charge_window,
             discharge_window=discharge_window,
             profile=profile,
+            reference_prices=reference_prices,
         ),
         soc_feasibility=build_milp_soc_feasibility(result, profile),
         battery_stress=battery_stress,

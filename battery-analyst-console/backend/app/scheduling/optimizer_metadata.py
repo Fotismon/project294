@@ -2,7 +2,7 @@ from app.schemas.schedule import OptimizerMetadata
 
 
 MILP_NOT_IMPLEMENTED_REASON = (
-    "MILP optimizer is not implemented yet; used window_v1 scheduler."
+    "MILP solver timeout or infeasible; fell back to window_v1 scheduler."
 )
 WINDOW_OPTIMIZER_VERSION = "window_v1.2"
 

@@ -54,12 +54,21 @@ def build_price_spread_diagnostics(
     charge_window: Window,
     discharge_window: Window,
     profile: BatteryOperatingProfile,
+    reference_prices: list[float] | None = None,
 ) -> PriceSpreadDiagnostics:
+    if reference_prices and len(reference_prices) == 96:
+        ref_charge_window, ref_discharge_window = _derive_reference_windows(reference_prices)
+        ref_prices = reference_prices
+    else:
+        ref_prices = old_mock_reference_prices()
+        ref_charge_window = Window(start="11:00", end="13:00", avg_price=35.0)
+        ref_discharge_window = Window(start="20:00", end="22:00", avg_price=120.0)
+
     return PriceSpreadDiagnostics(
         mock_reference=price_spread_summary(
-            prices=old_mock_reference_prices(),
-            charge_window=Window(start="11:00", end="13:00", avg_price=35.0),
-            discharge_window=Window(start="20:00", end="22:00", avg_price=120.0),
+            prices=ref_prices,
+            charge_window=ref_charge_window,
+            discharge_window=ref_discharge_window,
             profile=profile,
         ),
         live_forecast=price_spread_summary(
@@ -70,6 +79,33 @@ def build_price_spread_diagnostics(
         ),
         value_math="EUR = EUR/MWh * MWh",
     )
+
+
+def _derive_reference_windows(prices: list[float]) -> tuple[Window, Window]:
+    """Find the cheapest and most expensive 8-interval (2-hour) windows in a price series."""
+    n = len(prices)
+    window_size = 8
+    best_charge_idx = min(range(n - window_size + 1), key=lambda i: sum(prices[i:i + window_size]) / window_size)
+    best_discharge_idx = max(range(n - window_size + 1), key=lambda i: sum(prices[i:i + window_size]) / window_size)
+
+    def idx_to_time(idx: int) -> str:
+        total_minutes = idx * 15
+        return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+    charge_avg = round(sum(prices[best_charge_idx:best_charge_idx + window_size]) / window_size, 2)
+    discharge_avg = round(sum(prices[best_discharge_idx:best_discharge_idx + window_size]) / window_size, 2)
+
+    charge_window = Window(
+        start=idx_to_time(best_charge_idx),
+        end=idx_to_time(best_charge_idx + window_size),
+        avg_price=charge_avg,
+    )
+    discharge_window = Window(
+        start=idx_to_time(best_discharge_idx),
+        end=idx_to_time(best_discharge_idx + window_size),
+        avg_price=discharge_avg,
+    )
+    return charge_window, discharge_window
 
 
 def old_mock_reference_prices() -> list[float]:

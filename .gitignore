@@ -43,13 +43,11 @@ pnpm-debug.log*
 # Local data artifacts
 battery-analyst-console/data/*
 !battery-analyst-console/data/README.md
-*.csv
 *.tsv
 *.xlsx
 *.xls
 *.parquet
 *.feather
-*.pkl
 *.pickle
 
 # OS and editor files
