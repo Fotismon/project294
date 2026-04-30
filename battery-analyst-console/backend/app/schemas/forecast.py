@@ -7,6 +7,20 @@ class ForecastPoint(BaseModel):
     lower_bound: float = Field(..., description="Lower forecast confidence bound.")
     upper_bound: float = Field(..., description="Upper forecast confidence bound.")
     confidence: str = Field(..., description="Qualitative confidence level.")
+    confidence_score: float = Field(
+        ...,
+        ge=0,
+        le=1,
+        description="Normalized confidence score from 0 to 1.",
+    )
+    arbitrage_signal: float = Field(
+        ...,
+        description="Forecast price premium over the daily minimum P50 price.",
+    )
+    risk_adjusted_price: float = Field(
+        ...,
+        description="Confidence-weighted price between the P50 and lower confidence bound.",
+    )
 
 
 class ForecastResponse(BaseModel):
@@ -54,6 +68,9 @@ class ForecastResponse(BaseModel):
                         "lower_bound": 31.2,
                         "upper_bound": 45.9,
                         "confidence": "high",
+                        "confidence_score": 0.82,
+                        "arbitrage_signal": 12.4,
+                        "risk_adjusted_price": 37.1,
                     }
                 ],
             }

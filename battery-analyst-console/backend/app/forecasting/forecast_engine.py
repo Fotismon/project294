@@ -71,6 +71,14 @@ def run_forecast(target_date: str, X: pd.DataFrame) -> ForecastResponse:
     slots = pd.date_range(target_date, periods=96, freq="15min", tz="Europe/Athens")
     band_widths = p95 - p05
     avg_band_width = float(np.mean(band_widths))
+    q90_band_width = float(np.quantile(band_widths, 0.9))
+    if q90_band_width <= 0:
+        confidence_scores = np.ones_like(band_widths)
+    else:
+        confidence_scores = np.clip(1 - (band_widths / q90_band_width), 0, 1)
+    daily_min_p50 = float(np.min(p50))
+    arbitrage_signals = p50 - daily_min_p50
+    risk_adjusted_prices = confidence_scores * p50 + (1 - confidence_scores) * p05
 
     points = [
         ForecastPoint(
@@ -79,6 +87,9 @@ def run_forecast(target_date: str, X: pd.DataFrame) -> ForecastResponse:
             lower_bound=round(float(p05[i]), 2),
             upper_bound=round(float(p95[i]), 2),
             confidence=_band_to_confidence(float(band_widths[i])),
+            confidence_score=round(float(confidence_scores[i]), 4),
+            arbitrage_signal=round(float(arbitrage_signals[i]), 2),
+            risk_adjusted_price=round(float(risk_adjusted_prices[i]), 2),
         )
         for i in range(96)
     ]

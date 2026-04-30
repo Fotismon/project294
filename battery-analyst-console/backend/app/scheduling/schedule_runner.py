@@ -142,6 +142,7 @@ def run_schedule_analysis(request: ScheduleRequest) -> ScheduleResponse:
         "forecast_uncertainty_width": uncertainty_width,
         "minimum_margin_eur_per_mwh": effective_margin,
     })
+    milp_request = augmented.model_copy(update={"prices": p50})
 
     # p50 (unblended) used as the reference baseline in price spread diagnostics
     reference_prices = p50 if auto_fetched else None
@@ -153,7 +154,12 @@ def run_schedule_analysis(request: ScheduleRequest) -> ScheduleResponse:
     if augmented.optimizer_mode == "milp":
         try:
             return run_milp_schedule_analysis(
-                augmented, profile, requested_mode="milp", reference_prices=reference_prices
+                milp_request,
+                profile,
+                requested_mode="milp",
+                reference_prices=reference_prices,
+                charge_prices=p05,
+                discharge_prices=p95,
             )
         except Exception as error:
             failed_result = build_failed_milp_result(
@@ -162,19 +168,21 @@ def run_schedule_analysis(request: ScheduleRequest) -> ScheduleResponse:
             )
             return convert_milp_result_to_schedule_response(
                 result=failed_result,
-                prices=augmented.prices,
+                prices=milp_request.prices,
                 profile=profile,
-                date=augmented.date,
+                date=milp_request.date,
                 requested_mode="milp",
                 reference_prices=reference_prices,
             )
 
     try:
         milp_response = run_milp_schedule_analysis(
-            augmented,
+            milp_request,
             profile,
             requested_mode="auto",
             reference_prices=reference_prices,
+            charge_prices=p05,
+            discharge_prices=p95,
         )
     except Exception as error:
         return run_window_schedule_fallback(
@@ -262,12 +270,16 @@ def run_milp_schedule_analysis(
     profile: BatteryOperatingProfile,
     requested_mode: str,
     reference_prices: list[float] | None = None,
+    charge_prices: list[float] | None = None,
+    discharge_prices: list[float] | None = None,
 ) -> ScheduleResponse:
     if request.prices is None:
         raise ValueError("prices are required for MILP schedule generation.")
 
     result = solve_milp_dispatch(
         prices=request.prices,
+        charge_prices=charge_prices,
+        discharge_prices=discharge_prices,
         profile=profile,
         temperatures=request.temperatures,
     )

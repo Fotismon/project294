@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from datetime import datetime
 
@@ -9,12 +10,29 @@ import requests
 
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 _STORE_PATH = MODELS_DIR / "henex_dam_results (1).csv"
+_REGIME_PATH = MODELS_DIR / "regime_boundaries.json"
 
 ATHENS_LAT = 37.9838
 ATHENS_LON = 23.7275
 
 # Cached feature store (loaded once per process).
 _feature_store: pd.DataFrame | None = None
+_regime_boundaries: dict[str, float] | None = None
+
+
+def _load_regime_boundaries() -> dict[str, float]:
+    global _regime_boundaries
+    if _regime_boundaries is None:
+        if _REGIME_PATH.exists():
+            with open(_REGIME_PATH) as f:
+                data = json.load(f)
+            _regime_boundaries = {
+                "q33": float(data["q33"]),
+                "q67": float(data["q67"]),
+            }
+        else:
+            _regime_boundaries = {"q33": 80.0, "q67": 120.0}
+    return _regime_boundaries
 
 
 def load_feature_store() -> pd.DataFrame:
@@ -88,6 +106,35 @@ def _get_store_rows(store: pd.DataFrame, target_dt: pd.Timestamp, days_back: int
     return rows if len(rows) == 96 else pd.DataFrame()
 
 
+def _slot_index(series: pd.Series) -> pd.Series:
+    return series.dt.hour * 4 + series.dt.minute // 15
+
+
+def _per_slot_rolling_stats(
+    store: pd.DataFrame,
+    target_dt: pd.Timestamp,
+) -> tuple[list[float], list[float]]:
+    slot_roll_means: list[float] = []
+    slot_roll_stds: list[float] = []
+    store_slots = _slot_index(store["datetime"])
+
+    for slot_idx in range(96):
+        slot_values: list[float] = []
+        for days_back in range(1, 8):
+            lag_date = (target_dt - pd.Timedelta(days=days_back)).date()
+            mask = (store["datetime"].dt.date == lag_date) & (store_slots == slot_idx)
+            vals = store.loc[mask, "mcp"].values
+            if len(vals) > 0:
+                slot_values.append(float(vals[0]))
+
+        slot_roll_means.append(float(np.mean(slot_values)) if slot_values else np.nan)
+        slot_roll_stds.append(
+            float(np.std(slot_values, ddof=1)) if len(slot_values) > 1 else np.nan
+        )
+
+    return slot_roll_means, slot_roll_stds
+
+
 def build_inference_features(
     target_date: str,
     store: pd.DataFrame,
@@ -126,9 +173,9 @@ def build_inference_features(
 
     past_start = target_dt - pd.Timedelta(days=7)
     past_mask = (store["datetime"] >= past_start) & (store["datetime"] < target_dt)
-    past_mcp = store.loc[past_mask, "mcp"]
-    df["mcp_roll7d_mean"] = past_mcp.mean() if len(past_mcp) > 0 else np.nan
-    df["mcp_roll7d_std"] = past_mcp.std() if len(past_mcp) > 1 else np.nan
+    slot_roll_means, slot_roll_stds = _per_slot_rolling_stats(store, target_dt)
+    df["mcp_roll7d_mean"] = slot_roll_means
+    df["mcp_roll7d_std"] = slot_roll_stds
 
     # hourly_trend: rolling 4-slot mean of mcp_lag_1d (matches notebook)
     df["hourly_trend"] = df["mcp_lag_1d"].rolling(4, min_periods=1).mean()
@@ -228,13 +275,13 @@ def build_inference_features(
         df["mcp_lag_1d"] - df["mcp_lag_1d"].rolling(96, min_periods=1).min()
     )
 
-    # price_regime: which third of the price distribution is mcp_lag_1d in?
-    # Use global store quantiles to match training distribution.
-    store_mcp_q33 = store["mcp"].quantile(0.333)
-    store_mcp_q67 = store["mcp"].quantile(0.667)
+    # price_regime: which third of the training price distribution is mcp_lag_1d in?
+    regime_boundaries = _load_regime_boundaries()
+    q33 = regime_boundaries["q33"]
+    q67 = regime_boundaries["q67"]
     df["price_regime"] = df["mcp_lag_1d"].apply(
-        lambda x: 0 if pd.isna(x) or x <= store_mcp_q33
-        else (1 if x <= store_mcp_q67 else 2)
+        lambda x: 0 if pd.isna(x) or x <= q33
+        else (1 if x <= q67 else 2)
     ).astype(int)
 
     # volatility_regime: is the 7d rolling std above the historical median?
@@ -245,8 +292,10 @@ def build_inference_features(
         .dropna()
     )
     std_threshold = store_7d_stds.median() if len(store_7d_stds) > 0 else 20.0
-    current_std = df["mcp_roll7d_std"].iloc[0]
-    df["volatility_regime"] = int(not pd.isna(current_std) and current_std > std_threshold)
+    df["volatility_regime"] = [
+        int(not np.isnan(slot_std) and slot_std > std_threshold)
+        for slot_std in slot_roll_stds
+    ]
 
     # prev_day_spread: yesterday's (max - min) MCP
     if len(lag1_rows) == 96:

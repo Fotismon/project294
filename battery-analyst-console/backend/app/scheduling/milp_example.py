@@ -23,7 +23,7 @@ def load_example_profile() -> BatteryOperatingProfile:
             min_rest_between_actions_minutes=15,
             temperature_warning_c=30,
             temperature_avoid_c=40,
-            degradation_cost_eur_per_mwh=20,
+            degradation_cost_eur_per_mwh=5,
             auxiliary_load_percent=0.02,
             ramp_rate_mw_per_interval=100,
             grid_connection_limit_mw=100,
