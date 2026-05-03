@@ -21,7 +21,7 @@ dist/
 # Environment and local secrets
 .env
 .env.*
-!.env.example
+.env.example
 !.env.sample
 
 # FastAPI/Uvicorn local runtime files
@@ -43,6 +43,10 @@ pnpm-debug.log*
 # Local data artifacts
 battery-analyst-console/data/*
 !battery-analyst-console/data/README.md
+
+# Backend generated cache outputs
+battery-analyst-console/backend/cache/*
+!battery-analyst-console/backend/cache/.gitkeep
 
 # OS and editor files
 .DS_Store

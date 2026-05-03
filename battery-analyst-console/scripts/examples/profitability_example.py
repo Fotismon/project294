@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
 from app.scheduling.profitability import calculate_net_profit_per_mwh
 
 

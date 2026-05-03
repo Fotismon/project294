@@ -9,7 +9,8 @@ import pandas as pd
 import requests
 
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
-_STORE_PATH = MODELS_DIR / "henex_dam_results (1).csv"
+DATA_DIR   = Path(__file__).parent.parent.parent / "data"
+_STORE_PATH  = DATA_DIR   / "henex_dam_results.csv"
 _REGIME_PATH = MODELS_DIR / "regime_boundaries.json"
 
 ATHENS_LAT = 37.9838

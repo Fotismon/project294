@@ -13,12 +13,12 @@ def candidate_market_price_paths(csv_path: str | None = None) -> list[Path]:
     return [
         repo_root / "data" / "market_prices.csv",
         current_file.parent / "market_prices.csv",
-        repo_root / "backend" / "models" / "henex_dam_results (1).csv",
+        repo_root / "backend" / "data" / "henex_dam_results.csv",
     ]
 
 
 def market_price_source_label(path: Path) -> str:
-    if path.name == "henex_dam_results (1).csv":
+    if path.name == "henex_dam_results.csv":
         return "henex_feature_store_mcp"
     return "market_prices_csv"
 

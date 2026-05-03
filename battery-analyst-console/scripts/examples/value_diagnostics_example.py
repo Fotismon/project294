@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
 from app.battery.profiles import get_battery_profile
 from app.fleet.config import FleetAssetConfig
 from app.schemas.schedule import Window

@@ -15,7 +15,8 @@ from app.schemas.forecast import (
 )
 
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
-_SHAP_PATH = MODELS_DIR / "shap_per_slot.csv"
+CACHE_DIR  = Path(__file__).parent.parent.parent / "cache"
+_SHAP_PATH = CACHE_DIR / "shap_per_slot.csv"
 _shap_rows: pd.DataFrame | None = None
 
 
