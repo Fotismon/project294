@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Battery Analyst Console',
+  title: 'Hellenic Batteries',
   description: 'Energy market decision support for battery operations',
 }
 
