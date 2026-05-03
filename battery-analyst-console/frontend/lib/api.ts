@@ -192,6 +192,8 @@ function mapForecast(response: BackendForecastResponse): ForecastPoint[] {
       lower_bound: point.lower_bound,
       upper_bound: point.upper_bound,
       confidence: point.confidence,
+      confidence_score: point.confidence_score ?? null,
+      arbitrage_signal: point.arbitrage_signal ?? null,
       shap_explanation: point.shap_explanation ?? null,
       actual_price: null,
       action: 'hold',
@@ -394,11 +396,12 @@ function mapBacktest(response: BackendBacktestResponse): BacktestResponse {
   }
 }
 
-export async function getForecast(date: string): Promise<ForecastPoint[]> {
+export async function getForecast(date: string): Promise<{ points: ForecastPoint[]; avg_band_width_eur: number }> {
   requireApiBaseUrl()
 
   try {
-    return mapForecast(await fetchJson<BackendForecastResponse>(`/forecast?date=${date}`))
+    const raw = await fetchJson<BackendForecastResponse>(`/forecast?date=${date}`)
+    return { points: mapForecast(raw), avg_band_width_eur: raw.avg_band_width_eur }
   } catch (error) {
     recordApiFallback('/forecast', error)
     throw error

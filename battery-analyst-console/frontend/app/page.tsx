@@ -9,6 +9,7 @@ import { BatteryStressCard } from '@/components/dashboard/BatteryStressCard'
 import { ConstraintPanel } from '@/components/dashboard/ConstraintPanel'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { DispatchDiagnosticsPanel } from '@/components/dashboard/DispatchDiagnosticsPanel'
+import { ExplanationPanel } from '@/components/dashboard/ExplanationPanel'
 import { FleetAlertsPanel } from '@/components/dashboard/FleetAlertsPanel'
 import { FleetOverview } from '@/components/dashboard/FleetOverview'
 import { FleetManagerSection } from '@/components/dashboard/FleetManagerSection'
@@ -18,6 +19,7 @@ import { RecommendationCards } from '@/components/dashboard/RecommendationCards'
 import { RiskAlertsView } from '@/components/dashboard/RiskAlertsView'
 import { ScenarioComparisonPanel } from '@/components/dashboard/ScenarioComparisonPanel'
 import { ScenarioControls } from '@/components/dashboard/ScenarioControls'
+import { ScheduleTradeoffMatrix } from '@/components/dashboard/ScheduleTradeoffMatrix'
 import { ConsoleSectionId } from '@/components/dashboard/SideNav'
 import { clearApiFallback, getBacktestCoverage, getFleet, getForecast, getLastApiFallback, getSchedule, hasConfiguredApiBaseUrl, runBacktest, runScenario } from '@/lib/api'
 import {
@@ -210,6 +212,7 @@ export default function Home() {
   const [fleetAssets, setFleetAssets] = useState<BatteryAsset[]>([])
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
+  const [avgBandWidth, setAvgBandWidth] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [apiStatus, setApiStatus] = useState<ApiStatus>({
@@ -267,7 +270,7 @@ export default function Home() {
       try {
         const operatingDate = tomorrowAthens()
 
-        const [schedule, forecast, fleet, coverage] = await Promise.all([
+        const [schedule, forecastResult, fleet, coverage] = await Promise.all([
           getSchedule(operatingDate, 'balanced', optimizerMode),
           getForecast(operatingDate),
           getFleet(),
@@ -275,7 +278,8 @@ export default function Home() {
         ])
         if (!mounted) return
         setScheduleData(schedule)
-        setForecastData(forecast)
+        setForecastData(forecastResult.points)
+        setAvgBandWidth(forecastResult.avg_band_width_eur)
         setFleetAssets(fleet.assets)
         setBacktestCoverage(coverage)
         setBacktestDate((currentDate) => (
@@ -518,6 +522,7 @@ export default function Home() {
             fleetAssets={displayFleetAssets}
             alerts={alerts}
             fleetSummary={fleetSummary}
+            avgBandWidth={avgBandWidth}
           />
         )}
         {activeSection === 'fleet' && !isLoading && !scheduleData && <LiveDataUnavailablePanel />}
@@ -601,20 +606,11 @@ export default function Home() {
               scenarioSchedule={scenarioResult}
             />
 
+            <ScheduleTradeoffMatrix schedule={scheduleData} />
+
             <DispatchDiagnosticsPanel diagnostics={scheduleData.diagnostics} optimizer={scheduleData.optimizer} />
 
-            <div className="border border-border bg-surface-elevated/50 p-4">
-              <h3 className="text-xs uppercase tracking-wider text-text-secondary">Scenario reasoning</h3>
-              {scheduleData.explanation.length > 0 ? (
-                <ul className="mt-3 space-y-2">
-                  {scheduleData.explanation.slice(0, 5).map((reason) => (
-                    <li key={reason} className="text-sm leading-relaxed text-text-secondary">- {reason}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-3 text-sm text-text-muted">No scenario explanation returned.</p>
-              )}
-            </div>
+            <ExplanationPanel explanations={scheduleData.explanation} />
 
             <div className="rounded-lg border border-border bg-surface-elevated/50 p-4">
               <h3 className="mb-3 text-xs uppercase tracking-wider text-text-secondary">Fleet Impact Preview</h3>

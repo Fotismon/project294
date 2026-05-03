@@ -213,6 +213,8 @@ export interface ForecastPoint {
   lower_bound?: number
   upper_bound?: number
   confidence?: string
+  confidence_score?: number | null
+  arbitrage_signal?: number | null
   shap_explanation?: ShapSlotExplanation | null
   p10_price: number
   p50_price: number

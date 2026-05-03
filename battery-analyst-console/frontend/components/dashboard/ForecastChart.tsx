@@ -116,6 +116,8 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow, schedule }:
         : isInWindow(point.timestamp, dischargeWindow)
           ? 'discharge'
           : 'idle',
+      arbitrage_signal: point.arbitrage_signal ?? null,
+      confidence_score: point.confidence_score ?? null,
     }))
 
   const chargeStart = chargeWindow ? timestampForWindow(data, chargeWindow.start) : null
@@ -123,7 +125,7 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow, schedule }:
   const dischargeStart = dischargeWindow ? timestampForWindow(data, dischargeWindow.start) : null
   const dischargeEnd = dischargeWindow ? timestampForWindow(data, dischargeWindow.end) : null
 
-  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint & { scheduled_action?: string; soc_percent?: number } }> }) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: ForecastPoint & { scheduled_action?: string; soc_percent?: number; arbitrage_signal?: number | null; confidence_score?: number | null } }> }) => {
     if (!active || !payload?.length) return null
     const point = payload[0].payload
     const action = point.scheduled_action ?? 'idle'
@@ -160,6 +162,16 @@ export function ForecastChart({ data, chargeWindow, dischargeWindow, schedule }:
             {action.toUpperCase()}
           </p>
           {point.soc_percent != null && <p className="text-xs text-text-secondary">Estimated SoC: {point.soc_percent.toFixed(1)}%</p>}
+          {point.arbitrage_signal != null && (
+            <p className="text-xs text-text-secondary">
+              Arb premium: <span className="font-mono text-success">+{point.arbitrage_signal.toFixed(1)} €/MWh</span>
+            </p>
+          )}
+          {point.confidence_score != null && (
+            <p className="text-xs text-text-muted">
+              Model confidence: {(point.confidence_score * 100).toFixed(0)}%
+            </p>
+          )}
           <p className="max-w-xs pt-1 text-xs leading-relaxed text-text-secondary">{scheduleReason}</p>
           {topShap.length > 0 && (
             <div className="mt-2 border-t border-border pt-2">

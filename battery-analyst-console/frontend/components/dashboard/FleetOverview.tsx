@@ -22,7 +22,9 @@ import { FleetAlertsPanel } from './FleetAlertsPanel'
 import { MarketForecastSection } from './MarketForecastSection'
 import { OptimizerBadge } from './OptimizerBadge'
 import { ProfitHealthComparisonCard } from './ProfitHealthComparisonCard'
+import { ScheduleTradeoffMatrix } from './ScheduleTradeoffMatrix'
 import { SoCFeasibilityCard } from './SoCFeasibilityCard'
+import { ValueDiagnosticsPanel } from './ValueDiagnosticsPanel'
 
 interface FleetOverviewProps {
   schedule: ScheduleResponse
@@ -30,6 +32,7 @@ interface FleetOverviewProps {
   fleetAssets: BatteryAsset[]
   alerts: Alert[]
   fleetSummary: FleetSummary
+  avgBandWidth?: number | null
 }
 
 function formatEuro(value: number): string {
@@ -78,7 +81,8 @@ export function FleetOverview({
   forecastData,
   fleetAssets,
   alerts,
-  fleetSummary
+  fleetSummary,
+  avgBandWidth
 }: FleetOverviewProps) {
   const hasAlerts = alerts.length > 0 || hasGeneratedAssetAlerts(fleetAssets)
   const singleProfileValue = schedule.single_profile_expected_value_range_eur ?? schedule.expected_value_range_eur
@@ -125,37 +129,39 @@ export function FleetOverview({
         <MetricCard label="Fleet availability" value={`${fleetSummary.available_assets}/${fleetSummary.total_assets}`} helperText={`${formatPercent(fleetSummary.average_soc)} average SoC`} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2.4fr)_minmax(320px,0.8fr)]">
-        <div className="space-y-6 xl:col-span-2">
-          <SectionPanel title="Market Forecast" subtitle="Price signal and recommended operating windows.">
-            <MarketForecastSection
-              forecastData={forecastData}
-              schedule={schedule}
+      <div className="space-y-6">
+        <MarketForecastSection
+          forecastData={forecastData}
+          schedule={schedule}
+          avgBandWidth={avgBandWidth}
+        />
+
+        <ProfitHealthComparisonCard schedule={schedule} />
+
+        <ScheduleTradeoffMatrix schedule={schedule} />
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <ConstraintPanel constraints={schedule.physical_constraints} />
+          <SoCFeasibilityCard feasibility={schedule.soc_feasibility} />
+        </div>
+
+        <AlternativesPanel alternatives={schedule.alternatives} />
+
+        <ValueDiagnosticsPanel
+          provenance={schedule.forecast_provenance}
+          diagnostics={schedule.price_spread_diagnostics}
+        />
+
+        <SectionPanel title="Operational Alerts" subtitle="Risks from the latest schedule or scenario.">
+          {hasAlerts ? (
+            <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />
+          ) : (
+            <EmptyState
+              title="No active alerts"
+              message="No operational alerts were returned by the latest schedule or scenario."
             />
-          </SectionPanel>
-
-          <ProfitHealthComparisonCard schedule={schedule} />
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <ConstraintPanel constraints={schedule.physical_constraints} />
-            <SoCFeasibilityCard feasibility={schedule.soc_feasibility} />
-          </div>
-
-          <AlternativesPanel alternatives={schedule.alternatives} />
-        </div>
-
-        <div className="space-y-6 xl:col-span-2">
-          <SectionPanel title="Operational Alerts" subtitle="Risks from the latest schedule or scenario.">
-            {hasAlerts ? (
-              <FleetAlertsPanel alerts={alerts} assets={fleetAssets} />
-            ) : (
-              <EmptyState
-                title="No active alerts"
-                message="No operational alerts were returned by the latest schedule or scenario."
-              />
-            )}
-          </SectionPanel>
-        </div>
+          )}
+        </SectionPanel>
       </div>
     </div>
   )

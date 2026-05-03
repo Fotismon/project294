@@ -2,9 +2,10 @@
 
 import React from 'react'
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ReferenceArea,
   ResponsiveContainer,
   Tooltip,
@@ -342,7 +343,12 @@ function BacktestCurveChart({
   const chartData = curve.filter((point) => {
     const hour = new Date(point.timestamp).getHours()
     return hour >= 5 && hour <= 23
-  })
+  }).map((point) => ({
+    ...point,
+    forecast_band: point.lower_bound != null && point.upper_bound != null
+      ? [point.lower_bound, point.upper_bound] as [number, number]
+      : undefined
+  }))
   const chargeStart = chargeWindow ? timestampForWindow(curve, chargeWindow.start) : null
   const chargeEnd = chargeWindow ? timestampForWindow(curve, chargeWindow.end) : null
   const dischargeStart = dischargeWindow ? timestampForWindow(curve, dischargeWindow.start) : null
@@ -373,12 +379,19 @@ function BacktestCurveChart({
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           <StatusBadge label="Forecast" tone="info" dot />
+          <StatusBadge label="Forecast band" tone="neutral" dot />
           <StatusBadge label="Realized MCP" tone="neutral" dot />
         </div>
       </div>
       <div className="mt-4 h-[320px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 16, right: 24, left: 16, bottom: 16 }}>
+          <ComposedChart data={chartData} margin={{ top: 16, right: 24, left: 16, bottom: 16 }}>
+            <defs>
+              <linearGradient id="backtestBandGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#a1a1aa" stopOpacity={0.18} />
+                <stop offset="95%" stopColor="#a1a1aa" stopOpacity={0.04} />
+              </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" vertical={false} />
             <XAxis
               dataKey="timestamp"
@@ -408,9 +421,19 @@ function BacktestCurveChart({
             {dischargeStart && dischargeEnd && (
               <ReferenceArea x1={dischargeStart} x2={dischargeEnd} strokeOpacity={0} fill="#f59e0b" fillOpacity={0.12} />
             )}
+            <Area
+              type="monotone"
+              dataKey="forecast_band"
+              stroke="transparent"
+              fill="url(#backtestBandGradient)"
+              fillOpacity={1}
+              dot={false}
+              activeDot={false}
+              connectNulls={false}
+            />
             <Line type="monotone" dataKey="forecast_price" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
             <Line type="monotone" dataKey="realized_price" stroke="#e8e8ed" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
